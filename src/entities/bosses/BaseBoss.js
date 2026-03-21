@@ -22,10 +22,13 @@ export default class BaseBoss extends Phaser.Physics.Arcade.Sprite {
       barX + barWidth / 2, barY + 10, barWidth, 20, 0x333333
     ).setScrollFactor(0).setDepth(100);
 
+    // Left-anchored fill bar — set x to left edge, origin to (0, 0.5)
     this._hpBarFill = scene.add.rectangle(
-      barX + barWidth / 2, barY + 10, barWidth, 20, 0xff4444
+      barX, barY + 10, barWidth, 20, 0xff4444
     ).setScrollFactor(0).setDepth(101);
-    this._hpBarFill.setOrigin(0.5, 0.5);
+    this._hpBarFill.setOrigin(0, 0.5);
+
+    this._barWidth = barWidth;
   }
 
   _updateHpBar() {
@@ -62,7 +65,7 @@ export default class BaseBoss extends Phaser.Physics.Arcade.Sprite {
 
   update(time, delta, players) {
     this.updateBoss(time, delta, players);
-    this._updateHpBar();
+    // _updateHpBar is called inside takeDamage — no need here
   }
 
   destroy() {
