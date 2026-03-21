@@ -64,11 +64,12 @@ export default class BossScene extends Phaser.Scene {
       p.on('melee', this._onPlayerMelee, this);
     });
 
-    // Bullet vs boss
+    // Bullet vs boss — use closure ref to avoid Phaser arg-order ambiguity
     if (this.boss) {
-      this.physics.add.overlap(this.bullets, this.boss, (bullet, boss) => {
+      this.physics.add.overlap(this.bullets, this.boss, (a, b) => {
+        const bullet = (a.damage !== undefined) ? a : b;
         if (bullet.active) {
-          boss.takeDamage(bullet.damage, true); // true = isRanged
+          this.boss.takeDamage(bullet.damage, true); // true = isRanged
           bullet.destroy();
         }
       });
@@ -85,7 +86,9 @@ export default class BossScene extends Phaser.Scene {
     });
 
     // Bullets vs minions
-    this.physics.add.overlap(this.bullets, this.minions, (bullet, minion) => {
+    this.physics.add.overlap(this.bullets, this.minions, (a, b) => {
+      const bullet = (a.damage !== undefined) ? a : b;
+      const minion = (a.damage !== undefined) ? b : a;
       if (bullet.active && minion.active) {
         minion.hp -= bullet.damage;
         bullet.destroy();
