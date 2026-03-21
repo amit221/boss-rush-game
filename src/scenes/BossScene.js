@@ -181,10 +181,10 @@ export default class BossScene extends Phaser.Scene {
       b.damage = dmgPerBullet;
       this.physics.velocityFromAngle(angleDeg, weapon.bulletSpeed, b.body.velocity);
       this.time.delayedCall(weapon.range / weapon.bulletSpeed * 1000, () => { if (b.active) b.destroy(); });
+      // Track damage per created bullet
+      if (player.playerId === 1) this._p1Damage += dmgPerBullet;
+      else this._p2Damage += dmgPerBullet;
     });
-
-    if (player.playerId === 1) this._p1Damage += dmgPerBullet * angles.length;
-    else this._p2Damage += dmgPerBullet * angles.length;
   }
 
   _getBulletAngles(player, target, weapon) {
@@ -196,7 +196,7 @@ export default class BossScene extends Phaser.Scene {
   }
 
   _onPlayerMelee(player, target) {
-    const dmg = calculateDamage(player.charData.meleeDamage, 1.0, player.damageUpgradeCount);
+    const dmg = calculateDamage(player.charData.meleeDamage, player.weaponData.damageMultiplier, player.damageUpgradeCount);
     target.takeDamage(dmg);
     if (player.playerId === 1) this._p1Damage += dmg;
     else this._p2Damage += dmg;
@@ -242,7 +242,7 @@ export default class BossScene extends Phaser.Scene {
 
       if (inRange) {
         downed._reviveTimer = (downed._reviveTimer ?? 0) + delta;
-        const pct = Math.min(1, downed._reviveTimer / other.reviveChannelTime);
+        const pct = Math.min(1, downed._reviveTimer / downed.reviveChannelTime);
 
         downed._reviveRing.clear();
         downed._reviveRing.lineStyle(4, 0x00ff00, 1);
@@ -250,7 +250,7 @@ export default class BossScene extends Phaser.Scene {
         downed._reviveRing.fillStyle(0x00ff00, 0.3 * pct);
         downed._reviveRing.fillCircle(downed.x, downed.y, 40 * pct);
 
-        if (downed._reviveTimer >= other.reviveChannelTime) {
+        if (downed._reviveTimer >= downed.reviveChannelTime) {
           downed._reviveRing.destroy();
           downed._reviveRing = null;
           downed.revive();
@@ -263,6 +263,8 @@ export default class BossScene extends Phaser.Scene {
   }
 
   _onBossDefeated() {
+    if (this._bossDefeated) return;
+    this._bossDefeated = true;
     const elapsed = (this.time.now - this._bossStartTime) / 1000;
     const totalDamage = this._p1Damage + this._p2Damage;
 
@@ -295,6 +297,8 @@ export default class BossScene extends Phaser.Scene {
   }
 
   update(time, delta) {
+    this._checkRevive(delta);
+    this._updateHUD();
     if (!this.boss) return;
 
     const allMinions = this.minions.getChildren().filter(m => m.active);
@@ -306,8 +310,5 @@ export default class BossScene extends Phaser.Scene {
     this.player2.update(time, delta, this._p2Keys, p2Target);
 
     if (this.boss.update) this.boss.update(time, delta, this.players);
-
-    this._checkRevive(delta);
-    this._updateHUD();
   }
 }
