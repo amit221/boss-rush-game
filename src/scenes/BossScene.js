@@ -172,7 +172,7 @@ export default class BossScene extends Phaser.Scene {
 
   _updateHUD() {
     this._p1HpBar.scaleX = Math.max(0, this.player1.hp / this.player1.maxHp);
-    if (this._playerCount === 2 && this.player2) {
+    if (this._playerCount === 2) {
       this._p2HpBar.scaleX = Math.max(0, this.player2.hp / this.player2.maxHp);
     }
   }
@@ -191,7 +191,7 @@ export default class BossScene extends Phaser.Scene {
       this.time.delayedCall(weapon.range / weapon.bulletSpeed * 1000, () => { if (b.active) b.destroy(); });
       // Track damage per created bullet
       if (player.playerId === 1) this._p1Damage += dmgPerBullet;
-      else this._p2Damage += dmgPerBullet;
+      else this._p2Damage += dmgPerBullet; // stays 0 in 1P mode; _onBossDefeated only reads it for pid=2
     });
   }
 
@@ -212,7 +212,7 @@ export default class BossScene extends Phaser.Scene {
       if (target.hp <= 0) target.destroy();
     }
     if (player.playerId === 1) this._p1Damage += dmg;
-    else this._p2Damage += dmg;
+    else this._p2Damage += dmg; // stays 0 in 1P mode; _onBossDefeated only reads it for pid=2
 
     // Hit flash on target
     this.tweens.add({ targets: target, alpha: 0.3, duration: 80, yoyo: true });
@@ -345,7 +345,7 @@ export default class BossScene extends Phaser.Scene {
     const p1Target = !this.player1.isDowned ? findTarget(this.player1, this.boss, allMinions) : null;
     this.player1.update(time, delta, this._p1Keys, p1Target);
 
-    if (this._playerCount === 2 && this.player2) {
+    if (this._playerCount === 2) {
       const p2Target = !this.player2.isDowned ? findTarget(this.player2, this.boss, allMinions) : null;
       this.player2.update(time, delta, this._p2Keys, p2Target);
     }
