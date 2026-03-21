@@ -1,13 +1,6 @@
 import Player from '../entities/Player.js';
-import KingSlime from '../entities/bosses/KingSlime.js';
+import { BOSS_CLASSES, BOSS_ORDER } from '../data/bosses.js';
 import { WEAPONS } from '../data/weapons.js';
-
-// Map boss name strings to classes (add more as they're implemented)
-const BOSS_CLASS_MAP = {
-  KingSlime,
-};
-
-const BOSS_ORDER = ['KingSlime','PyroSkull','StormEagle','IronGolem','ShadowMimic','Kraken','VoidGod'];
 
 function dist(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -53,14 +46,15 @@ export default class BossScene extends Phaser.Scene {
 
     // Spawn boss
     const bossName = BOSS_ORDER[this.bossIndex];
-    const BossClass = BOSS_CLASS_MAP[bossName];
+    const BossClass = BOSS_CLASSES[bossName];
     if (!BossClass) {
-      // Boss not yet implemented — use a placeholder rectangle boss
       this._spawnPlaceholderBoss(bossName);
     } else {
       this.boss = new BossClass(this, 800, 300);
       this.boss.on('defeated', this._onBossDefeated, this);
       this.boss.on('spawnMinions', this._spawnMinions, this);
+      this.boss.on('spawnBossBullet', this._spawnBossBullet, this);
+      this.boss.on('clonesSpawned', this._onClonesSpawned, this);
     }
 
     // Player events
@@ -74,7 +68,7 @@ export default class BossScene extends Phaser.Scene {
     if (this.boss) {
       this.physics.add.overlap(this.bullets, this.boss, (bullet, boss) => {
         if (bullet.active) {
-          boss.takeDamage(bullet.damage);
+          boss.takeDamage(bullet.damage, true); // true = isRanged
           bullet.destroy();
         }
       });
@@ -218,6 +212,28 @@ export default class BossScene extends Phaser.Scene {
     }
   }
 
+  _spawnBossBullet(x, y, angleDeg, speed, damage) {
+    const b = this.bossBullets.create(x, y, 'boss_bullet');
+    if (!b) return;
+    b.setDisplaySize(10, 10);
+    b.damage = damage;
+    this.physics.velocityFromAngle(angleDeg, speed, b.body.velocity);
+    this.time.delayedCall(3000, () => { if (b.active) b.destroy(); });
+  }
+
+  _onClonesSpawned(clones) {
+    // Add clones to the bullets overlap and player targeting
+    clones.forEach(clone => {
+      this.physics.add.overlap(this.bullets, clone, (bullet, cl) => {
+        if (bullet.active && cl.active && cl.takeDamage) {
+          cl.takeDamage(bullet.damage);
+          bullet.destroy();
+        }
+      });
+    });
+    this._shadowClones = clones;
+  }
+
   _onPlayerDowned(player) {
     if (player.playerId === 1) this._p1Survived = false;
     else this._p2Survived = false;
@@ -301,13 +317,24 @@ export default class BossScene extends Phaser.Scene {
     this._updateHUD();
     if (!this.boss) return;
 
-    const allMinions = this.minions.getChildren().filter(m => m.active);
+    const allMinions = [
+      ...this.minions.getChildren().filter(m => m.active),
+      ...(this._shadowClones ?? []).filter(c => c.active)
+    ];
 
     const p1Target = !this.player1.isDowned ? findTarget(this.player1, this.boss, allMinions) : null;
     const p2Target = !this.player2.isDowned ? findTarget(this.player2, this.boss, allMinions) : null;
 
     this.player1.update(time, delta, this._p1Keys, p1Target);
     this.player2.update(time, delta, this._p2Keys, p2Target);
+
+    // Apply ink slow from Kraken
+    [this.player1, this.player2].forEach(p => {
+      if (!p.isDowned && p._inInk && p.body) {
+        p.body.velocity.x *= 0.5;
+        p.body.velocity.y *= 0.5;
+      }
+    });
 
     if (this.boss.update) this.boss.update(time, delta, this.players);
   }
