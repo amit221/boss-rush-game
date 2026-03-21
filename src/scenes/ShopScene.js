@@ -13,6 +13,7 @@ export default class ShopScene extends Phaser.Scene {
   create() {
     this._sm = this.registry.get('shopManager');
     this._confirmed = { 1: false, 2: false };
+    this._doneTexts = {};
     this._buildUI();
     this._setupInput();
   }
@@ -76,9 +77,9 @@ export default class ShopScene extends Phaser.Scene {
       });
 
       // Done button
-      const doneColor = this._confirmed?.[pid] ? '#44ff44' : '#ffffff';
       const doneKey = pid === 1 ? 'ENTER' : 'SHIFT';
-      this.add.text(ox + 320, 670, `[${doneKey}] Done`, { fontSize: '20px', color: doneColor }).setOrigin(0.5);
+      const doneText = this.add.text(ox + 320, 670, `[${doneKey}] Done`, { fontSize: '20px', color: '#ffffff' }).setOrigin(0.5);
+      this._doneTexts[pid] = doneText;
     });
 
     // Center divider
@@ -92,6 +93,9 @@ export default class ShopScene extends Phaser.Scene {
 
   _confirm(pid) {
     this._confirmed[pid] = true;
+    if (this._doneTexts[pid]) {
+      this._doneTexts[pid].setText(`✓ READY`).setColor('#44ff44');
+    }
     if (this._confirmed[1] && this._confirmed[2]) {
       this.scene.start('BossScene');
     }

@@ -51,7 +51,6 @@ export default class ShadowMimic extends BaseBoss {
         }
       };
       this._clones.push(clone);
-      this.scene.physics.add.existing(clone);
     });
 
     // Register clones as targets in the scene

@@ -12,8 +12,9 @@ function createShopManager() {
     addCoins(pid, n) { this._coins[pid] = (this._coins[pid] ?? 0) + n; },
     awardBossCoins(pid, { survived, underTime, mostDamage }) {
       let t = 100;
+      if (survived) t += 20;
       if (underTime) t += 15;
-      if (mostDamage) t += 35;
+      if (mostDamage) t += 15;
       this.addCoins(pid, t);
     },
     getEquippedWeapon(pid) { return this._weapons[pid] ?? 'default'; },

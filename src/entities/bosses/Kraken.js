@@ -22,13 +22,14 @@ export default class Kraken extends BaseBoss {
         this.y + Math.sin(angle) * 100,
         20, 60, 0x003366
       );
-      this.scene.physics.add.existing(t);
+      this.scene.physics.add.existing(t, false);
       t.hp = 80;
       t.isTentacle = true;
       t._angle = angle;
       t._swingDir = 1;
       t._swingTimer = 0;
       this._tentacles.push(t);
+      if (this.scene.minions) this.scene.minions.add(t);
     }
   }
 

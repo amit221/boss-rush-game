@@ -57,7 +57,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
 
   _updateCursors(chars) {
     const x1 = 180 + this._p1Index * 260;
-    const x2 = x1 + 640;
+    const x2 = 180 + 640 + this._p2Index * 260;
     this._cursor1.setPosition(x1, 360);
     this._cursor2.setPosition(x2, 360);
   }

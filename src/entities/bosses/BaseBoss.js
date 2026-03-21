@@ -54,6 +54,11 @@ export default class BaseBoss extends Phaser.Physics.Arcade.Sprite {
 
   _doPhaseTransition() {
     this.scene.cameras.main.flash(300, 255, 255, 255);
+    const label = this.scene.add.text(640, 360, `PHASE ${this.phase}!`, {
+      fontSize: '64px', color: '#ff4444', fontStyle: 'bold',
+      stroke: '#000000', strokeThickness: 8
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(300);
+    this.scene.tweens.add({ targets: label, alpha: 0, delay: 800, duration: 400, onComplete: () => label.destroy() });
     this.scene.time.delayedCall(1000, () => {
       this.onPhaseChange(this.phase);
     });

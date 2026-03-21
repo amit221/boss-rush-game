@@ -73,7 +73,7 @@ export default class IronGolem extends BaseBoss {
         // Damage players on contact
         alive.forEach(p => {
           if (Phaser.Math.Distance.Between(r.x, r.y, p.x, p.y) < 30) {
-            p.takeDamage(8 * (delta / 1000) * 60); // ~8 per second
+            p.takeDamage(8 * (delta / 1000));
           }
         });
       });
