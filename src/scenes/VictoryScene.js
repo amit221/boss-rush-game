@@ -22,7 +22,7 @@ export default class VictoryScene extends Phaser.Scene {
       const sm = this.registry.get('shopManager');
       if (sm) sm.reset();
       this.registry.set('bossIndex', 0);
-      this.scene.start('CharacterSelectScene');
+      this.scene.start('MenuScene');
     });
   }
 }

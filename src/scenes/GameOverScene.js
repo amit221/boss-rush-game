@@ -18,7 +18,7 @@ export default class GameOverScene extends Phaser.Scene {
     this.tweens.add({ targets: retry, alpha: 0.1, duration: 700, yoyo: true, repeat: -1 });
     this.input.keyboard.once('keydown-ENTER', () => {
       this.registry.set('bossIndex', 0);
-      this.scene.start('CharacterSelectScene');
+      this.scene.start('MenuScene');
     });
   }
 }
