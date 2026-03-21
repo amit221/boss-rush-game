@@ -196,7 +196,12 @@ export default class BossScene extends Phaser.Scene {
 
   _onPlayerMelee(player, target) {
     const dmg = calculateDamage(player.charData.meleeDamage, player.weaponData.damageMultiplier, player.damageUpgradeCount);
-    target.takeDamage(dmg);
+    if (typeof target.takeDamage === 'function') {
+      target.takeDamage(dmg);
+    } else if (target.hp !== undefined) {
+      target.hp -= dmg;
+      if (target.hp <= 0) target.destroy();
+    }
     if (player.playerId === 1) this._p1Damage += dmg;
     else this._p2Damage += dmg;
 
