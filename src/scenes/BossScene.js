@@ -24,6 +24,7 @@ export default class BossScene extends Phaser.Scene {
     const reg = this.registry;
     this.bossIndex = reg.get('bossIndex') ?? 0;
     this.shopManager = reg.get('shopManager');
+    this._playerCount = reg.get('playerCount') ?? 2;
     const chars = reg.get('selectedCharacters') ?? { 1: 'brute', 2: 'scout' };
 
     // Arena
@@ -32,10 +33,12 @@ export default class BossScene extends Phaser.Scene {
 
     // Players
     this.player1 = new Player(this, 600, 600, 1, chars[1], this.shopManager);
-    this.player2 = new Player(this, 1000, 600, 2, chars[2], this.shopManager);
-    this.players = [this.player1, this.player2];
+    if (this._playerCount === 2) {
+      this.player2 = new Player(this, 1000, 600, 2, chars[2], this.shopManager);
+    }
+    this.players = this._playerCount === 2 ? [this.player1, this.player2] : [this.player1];
     this._p1Keys = this.player1.getKeys(this);
-    this._p2Keys = this.player2.getKeys(this);
+    if (this._playerCount === 2) this._p2Keys = this.player2.getKeys(this);
 
     // Projectile groups
     this.bullets = this.physics.add.group();
@@ -76,7 +79,7 @@ export default class BossScene extends Phaser.Scene {
     }
 
     // Boss bullets vs players
-    this.physics.add.overlap(this.bossBullets, [this.player1, this.player2], (bullet, player) => {
+    this.physics.add.overlap(this.bossBullets, this.players, (bullet, player) => {
       if (bullet.active && !player.isDowned) {
         player.takeDamage(bullet.damage);
         bullet.destroy();
@@ -141,31 +144,37 @@ export default class BossScene extends Phaser.Scene {
   }
 
   _setupCameras() {
-    this.cameras.main.setViewport(0, 0, 640, 720);
-    this.cameras.main.setBounds(0, 0, 1600, 1200);
-    this.cameras.main.startFollow(this.player1);
-
-    this.cam2 = this.cameras.add(640, 0, 640, 720);
-    this.cam2.setBounds(0, 0, 1600, 1200);
-    this.cam2.startFollow(this.player2);
-
-    // Divider
-    this.add.rectangle(640, 360, 4, 720, 0xffffff).setScrollFactor(0).setDepth(200);
+    if (this._playerCount === 2) {
+      this.cameras.main.setViewport(0, 0, 640, 720);
+      this.cameras.main.setBounds(0, 0, 1600, 1200);
+      this.cameras.main.startFollow(this.player1);
+      this.cam2 = this.cameras.add(640, 0, 640, 720);
+      this.cam2.setBounds(0, 0, 1600, 1200);
+      this.cam2.startFollow(this.player2);
+      this.add.rectangle(640, 360, 4, 720, 0xffffff).setScrollFactor(0).setDepth(200);
+    } else {
+      this.cameras.main.setViewport(0, 0, 1280, 720);
+      this.cameras.main.setBounds(0, 0, 1600, 1200);
+      this.cameras.main.startFollow(this.player1);
+    }
   }
 
   _setupHUD() {
-    // Player HP bar backgrounds
     this.add.rectangle(120, 700, 200, 14, 0x333333).setScrollFactor(0).setDepth(99);
-    this.add.rectangle(760, 700, 200, 14, 0x333333).setScrollFactor(0).setDepth(99);
     this._p1HpBar = this.add.rectangle(20, 700, 200, 14, 0x44ff44).setScrollFactor(0).setDepth(100).setOrigin(0, 0.5);
-    this._p2HpBar = this.add.rectangle(660, 700, 200, 14, 0x44ff44).setScrollFactor(0).setDepth(100).setOrigin(0, 0.5);
     this._p1Label = this.add.text(20, 685, 'P1', { fontSize: '12px', color: '#4488ff' }).setScrollFactor(0).setDepth(100);
-    this._p2Label = this.add.text(660, 685, 'P2', { fontSize: '12px', color: '#ff8844' }).setScrollFactor(0).setDepth(100);
+    if (this._playerCount === 2) {
+      this.add.rectangle(760, 700, 200, 14, 0x333333).setScrollFactor(0).setDepth(99);
+      this._p2HpBar = this.add.rectangle(660, 700, 200, 14, 0x44ff44).setScrollFactor(0).setDepth(100).setOrigin(0, 0.5);
+      this._p2Label = this.add.text(660, 685, 'P2', { fontSize: '12px', color: '#ff8844' }).setScrollFactor(0).setDepth(100);
+    }
   }
 
   _updateHUD() {
     this._p1HpBar.scaleX = Math.max(0, this.player1.hp / this.player1.maxHp);
-    this._p2HpBar.scaleX = Math.max(0, this.player2.hp / this.player2.maxHp);
+    if (this._playerCount === 2 && this.player2) {
+      this._p2HpBar.scaleX = Math.max(0, this.player2.hp / this.player2.maxHp);
+    }
   }
 
   _onPlayerFire(player, target) {
@@ -294,7 +303,8 @@ export default class BossScene extends Phaser.Scene {
     const elapsed = (this.time.now - this._bossStartTime) / 1000;
     const totalDamage = this._p1Damage + this._p2Damage;
 
-    [1, 2].forEach(pid => {
+    const pids = this._playerCount === 2 ? [1, 2] : [1];
+    pids.forEach(pid => {
       const myDamage = pid === 1 ? this._p1Damage : this._p2Damage;
       const survived = pid === 1 ? this._p1Survived : this._p2Survived;
       this.shopManager.awardBossCoins(pid, {
@@ -333,13 +343,15 @@ export default class BossScene extends Phaser.Scene {
     ];
 
     const p1Target = !this.player1.isDowned ? findTarget(this.player1, this.boss, allMinions) : null;
-    const p2Target = !this.player2.isDowned ? findTarget(this.player2, this.boss, allMinions) : null;
-
     this.player1.update(time, delta, this._p1Keys, p1Target);
-    this.player2.update(time, delta, this._p2Keys, p2Target);
+
+    if (this._playerCount === 2 && this.player2) {
+      const p2Target = !this.player2.isDowned ? findTarget(this.player2, this.boss, allMinions) : null;
+      this.player2.update(time, delta, this._p2Keys, p2Target);
+    }
 
     // Apply ink slow from Kraken
-    [this.player1, this.player2].forEach(p => {
+    this.players.forEach(p => {
       if (!p.isDowned && p._inInk && p.body) {
         p.body.velocity.x *= 0.5;
         p.body.velocity.y *= 0.5;
