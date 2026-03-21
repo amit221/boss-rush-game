@@ -8,13 +8,17 @@ export default class CharacterSelectScene extends Phaser.Scene {
     this._p1Index = 0;
     this._p2Index = 1;
     this._confirmed = { 1: false, 2: false };
+    this._playerCount = this.registry.get('playerCount') ?? 2;
+    this._p2Els = [];
 
     this.add.text(640, 35, 'SELECT YOUR CHARACTER', {
       fontSize: '36px', color: '#ffffff', fontStyle: 'bold'
     }).setOrigin(0.5);
 
     this.add.text(320, 90, 'PLAYER 1  (WASD)', { fontSize: '20px', color: '#4488ff' }).setOrigin(0.5);
-    this.add.text(960, 90, 'PLAYER 2  (ARROWS)', { fontSize: '20px', color: '#ff8844' }).setOrigin(0.5);
+    this._p2Els.push(
+      this.add.text(960, 90, 'PLAYER 2  (ARROWS)', { fontSize: '20px', color: '#ff8844' }).setOrigin(0.5)
+    );
 
     // Draw character cards for both sides
     this._cards1 = [];
@@ -33,23 +37,31 @@ export default class CharacterSelectScene extends Phaser.Scene {
       this.add.text(x1, y + 85, `DMG: ${char.rangedDamage}/${char.meleeDamage}`, { fontSize: '14px', color: '#aaaaaa' }).setOrigin(0.5);
       this._cards1.push(bg1);
 
-      // P2 card
-      const bg2 = this.add.rectangle(x2, y, 200, 240, 0x442222);
-      this.add.rectangle(x2, y - 60, 60, 60, char.color);
-      this.add.text(x2, y + 10, char.name, { fontSize: '22px', color: '#ffffff' }).setOrigin(0.5);
-      this.add.text(x2, y + 45, `HP: ${char.hp}`, { fontSize: '14px', color: '#aaaaaa' }).setOrigin(0.5);
-      this.add.text(x2, y + 65, `SPD: ${char.speed}`, { fontSize: '14px', color: '#aaaaaa' }).setOrigin(0.5);
-      this.add.text(x2, y + 85, `DMG: ${char.rangedDamage}/${char.meleeDamage}`, { fontSize: '14px', color: '#aaaaaa' }).setOrigin(0.5);
+      // P2 card — collect all elements for hiding
+      const bg2     = this.add.rectangle(x2, y, 200, 240, 0x442222);
+      const color2  = this.add.rectangle(x2, y - 60, 60, 60, char.color);
+      const name2   = this.add.text(x2, y + 10, char.name, { fontSize: '22px', color: '#ffffff' }).setOrigin(0.5);
+      const hp2     = this.add.text(x2, y + 45, `HP: ${char.hp}`, { fontSize: '14px', color: '#aaaaaa' }).setOrigin(0.5);
+      const spd2    = this.add.text(x2, y + 65, `SPD: ${char.speed}`, { fontSize: '14px', color: '#aaaaaa' }).setOrigin(0.5);
+      const dmg2    = this.add.text(x2, y + 85, `DMG: ${char.rangedDamage}/${char.meleeDamage}`, { fontSize: '14px', color: '#aaaaaa' }).setOrigin(0.5);
       this._cards2.push(bg2);
+      this._p2Els.push(bg2, color2, name2, hp2, spd2, dmg2);
     });
 
     // Cursor outlines
     this._cursor1 = this.add.rectangle(0, 360, 204, 244, 0x4488ff, 0).setStrokeStyle(3, 0x4488ff);
     this._cursor2 = this.add.rectangle(0, 360, 204, 244, 0xff8844, 0).setStrokeStyle(3, 0xff8844);
+    this._p2Els.push(this._cursor2);
 
     // Status texts
     this._status1 = this.add.text(320, 590, 'A/D to select  •  ENTER to confirm', { fontSize: '15px', color: '#4488ff' }).setOrigin(0.5);
     this._status2 = this.add.text(960, 590, 'LEFT/RIGHT to select  •  SHIFT to confirm', { fontSize: '15px', color: '#ff8844' }).setOrigin(0.5);
+    this._p2Els.push(this._status2);
+
+    if (this._playerCount === 1) {
+      this._p2Els.forEach(el => el.setVisible(false));
+      this._confirmed[2] = true;
+    }
 
     this._updateCursors(chars);
     this._setupInput(chars);
@@ -94,8 +106,11 @@ export default class CharacterSelectScene extends Phaser.Scene {
   }
 
   _confirmPlayer(pid, charId, chars) {
-    const otherId = pid === 1 ? chars[this._p2Index]?.id : chars[this._p1Index]?.id;
-    if (otherId === charId) return; // Can't pick same character
+    // In 2P mode, prevent both players picking the same character
+    if (this._playerCount === 2) {
+      const otherId = pid === 1 ? chars[this._p2Index]?.id : chars[this._p1Index]?.id;
+      if (otherId === charId) return;
+    }
 
     this._confirmed[pid] = true;
     const label = pid === 1 ? this._status1 : this._status2;
@@ -104,7 +119,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
     if (this._confirmed[1] && this._confirmed[2]) {
       this.registry.set('selectedCharacters', {
         1: chars[this._p1Index].id,
-        2: chars[this._p2Index].id
+        2: this._playerCount === 1 ? 'scout' : chars[this._p2Index].id
       });
       this.time.delayedCall(400, () => this.scene.start('BossScene'));
     }
