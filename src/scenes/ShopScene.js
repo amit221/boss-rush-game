@@ -1,4 +1,5 @@
 import { WEAPONS } from '../data/weapons.js';
+import { FONT_FAMILY } from '../ui/theme.js';
 
 const UPGRADES = [
   { id: 'hpUp',      name: 'HP Up (+20)',      price: 50  },
@@ -20,22 +21,22 @@ export default class ShopScene extends Phaser.Scene {
 
   _buildUI() {
     const sm = this._sm;
-    this.add.rectangle(640, 360, 1280, 720, 0x0a0a1a);
-    this.add.text(640, 30, 'SHOP', { fontSize: '52px', color: '#ffdd00', fontStyle: 'bold' }).setOrigin(0.5);
+    this.add.rectangle(640, 360, 1280, 720, 0x000000).setDepth(-10);
+    this.add.text(640, 30, 'SHOP', { fontFamily: FONT_FAMILY, fontSize: '28px', color: '#ffdd00' }).setOrigin(0.5);
 
     const pids = this._playerCount === 1 ? [1] : [1, 2];
     pids.forEach(pid => {
       const ox = this._playerCount === 1 ? 320 : (pid === 1 ? 0 : 640);
       const color = pid === 1 ? '#4488ff' : '#ff8844';
 
-      this.add.text(ox + 320, 80, `PLAYER ${pid}`, { fontSize: '24px', color }).setOrigin(0.5);
-      this.add.text(ox + 320, 110, `Coins: ${sm.getCoins(pid)}`, { fontSize: '20px', color: '#ffdd00' }).setOrigin(0.5);
+      this.add.text(ox + 320, 80, `PLAYER ${pid}`, { fontFamily: FONT_FAMILY, fontSize: '14px', color }).setOrigin(0.5);
+      this.add.text(ox + 320, 110, `Coins: ${sm.getCoins(pid)}`, { fontFamily: FONT_FAMILY, fontSize: '12px', color: '#ffdd00' }).setOrigin(0.5);
 
       // Divider
       this.add.line(ox + 320, 135, 0, 0, 240, 0, 0x444444);
 
       // Weapons
-      this.add.text(ox + 320, 155, '— WEAPONS —', { fontSize: '14px', color: '#888888' }).setOrigin(0.5);
+      this.add.text(ox + 320, 155, '— WEAPONS —', { fontFamily: FONT_FAMILY, fontSize: '9px', color: '#888888' }).setOrigin(0.5);
       let y = 180;
       const shopWeapons = Object.values(WEAPONS).filter(w => w.price > 0);
       shopWeapons.forEach(w => {
@@ -43,7 +44,7 @@ export default class ShopScene extends Phaser.Scene {
         const canAfford = sm.getCoins(pid) >= w.price;
         const col = equipped ? '#44ff44' : canAfford ? '#ffffff' : '#555555';
         const label = `${w.name}  [${w.price}c]${equipped ? ' ✓' : ''}`;
-        const t = this.add.text(ox + 320, y, label, { fontSize: '15px', color: col }).setOrigin(0.5);
+        const t = this.add.text(ox + 320, y, label, { fontFamily: FONT_FAMILY, fontSize: '14px', color: col }).setOrigin(0.5);
         if (!equipped) {
           t.setInteractive({ useHandCursor: true });
           t.on('pointerdown', () => {
@@ -57,7 +58,7 @@ export default class ShopScene extends Phaser.Scene {
 
       // Upgrades
       y += 10;
-      this.add.text(ox + 320, y, '— UPGRADES —', { fontSize: '14px', color: '#888888' }).setOrigin(0.5);
+      this.add.text(ox + 320, y, '— UPGRADES —', { fontFamily: FONT_FAMILY, fontSize: '9px', color: '#888888' }).setOrigin(0.5);
       y += 25;
       UPGRADES.forEach(u => {
         const count = sm.getUpgradeCount(pid, u.id);
@@ -65,7 +66,7 @@ export default class ShopScene extends Phaser.Scene {
         const canAfford = sm.getCoins(pid) >= u.price;
         const col = maxed ? '#555555' : canAfford ? '#ffffff' : '#555555';
         const label = `${u.name}  [${u.price}c]  ${count}/3`;
-        const t = this.add.text(ox + 320, y, label, { fontSize: '14px', color: col }).setOrigin(0.5);
+        const t = this.add.text(ox + 320, y, label, { fontFamily: FONT_FAMILY, fontSize: '14px', color: col }).setOrigin(0.5);
         if (!maxed) {
           t.setInteractive({ useHandCursor: true });
           t.on('pointerdown', () => {
@@ -80,7 +81,7 @@ export default class ShopScene extends Phaser.Scene {
       // Done button
       const doneColor = this._confirmed?.[pid] ? '#44ff44' : '#ffffff';
       const doneKey = pid === 1 ? 'ENTER' : 'SHIFT';
-      this.add.text(ox + 320, 670, `[${doneKey}] Done`, { fontSize: '20px', color: doneColor }).setOrigin(0.5);
+      this.add.text(ox + 320, 670, `[${doneKey}] Done`, { fontFamily: FONT_FAMILY, fontSize: '12px', color: doneColor }).setOrigin(0.5);
     });
 
     // Center divider — only in 2P

@@ -1,3 +1,5 @@
+import { FONT_FAMILY } from '../ui/theme.js';
+
 function createShopManager() {
   return {
     _coins: { 1: 0, 2: 0 },
@@ -47,19 +49,23 @@ export default class MenuScene extends Phaser.Scene {
   create() {
     const cx = 640, cy = 360;
 
+    this.add.rectangle(cx, cy, 1280, 720, 0x000000).setDepth(-10);
+
     this.add.text(cx, cy - 150, 'BOSS RUSH', {
-      fontSize: '72px', color: '#ffffff', fontStyle: 'bold',
-      stroke: '#ff4444', strokeThickness: 8
+      fontFamily: FONT_FAMILY,
+      fontSize: '40px', color: '#ffffff',
+      stroke: '#ff4444', strokeThickness: 6,
     }).setOrigin(0.5);
 
     // Mode selection
     this._playerCount = 2;
-    const opt1 = this.add.text(cx - 110, cy - 60, '1 Player',  { fontSize: '26px', color: '#aaaaaa' }).setOrigin(0.5);
-    const opt2 = this.add.text(cx + 110, cy - 60, '2 Players', { fontSize: '26px', color: '#ffffff' }).setOrigin(0.5);
+    const opt1 = this.add.text(cx - 110, cy - 60, '1 Player',  { fontFamily: FONT_FAMILY, fontSize: '14px', color: '#aaaaaa' }).setOrigin(0.5);
+    const opt2 = this.add.text(cx + 110, cy - 60, '2 Players', { fontFamily: FONT_FAMILY, fontSize: '14px', color: '#ffffff' }).setOrigin(0.5);
 
-    const controlsHint = this.add.text(cx, cy + 130, '', { fontSize: '18px', color: '#888888' }).setOrigin(0.5);
+    const controlsHint = this.add.text(cx, cy + 130, '', { fontFamily: FONT_FAMILY, fontSize: '11px', color: '#888888' }).setOrigin(0.5);
     this.add.text(cx, cy + 165, 'Auto-fire  •  Auto-melee  •  Revive your teammate', {
-      fontSize: '16px', color: '#666666'
+      fontFamily: FONT_FAMILY,
+      fontSize: '9px', color: '#666666',
     }).setOrigin(0.5);
 
     const updateMode = () => {
@@ -74,7 +80,8 @@ export default class MenuScene extends Phaser.Scene {
     updateMode();
 
     const startBtn = this.add.text(cx, cy + 40, '[ PRESS ENTER TO START ]', {
-      fontSize: '28px', color: '#44ff44'
+      fontFamily: FONT_FAMILY,
+      fontSize: '14px', color: '#44ff44',
     }).setOrigin(0.5);
     this.tweens.add({ targets: startBtn, alpha: 0.2, duration: 600, yoyo: true, repeat: -1 });
 

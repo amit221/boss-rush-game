@@ -27,9 +27,11 @@ export default class BossScene extends Phaser.Scene {
     this._playerCount = reg.get('playerCount') ?? 2;
     const chars = reg.get('selectedCharacters') ?? { 1: 'brute', 2: 'scout' };
 
-    // Arena — solid black (no repeating floor tile / grid)
+    // Arena — black void behind playfield; tiled floor (no stretched bitmap BG / noisy grid)
     this.physics.world.setBounds(0, 0, 1600, 1200);
     this.add.rectangle(800, 600, 1600, 1200, 0x000000).setOrigin(0.5).setDepth(-3);
+    const floor = this.add.tileSprite(800, 600, 1600, 1200, 'arena_floor').setOrigin(0.5).setDepth(-2);
+    floor.setTint(0x6a5a4a);
 
     // Players
     this.player1 = new Player(this, 600, 600, 1, chars[1], this.shopManager);
