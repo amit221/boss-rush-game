@@ -52,24 +52,36 @@ export default class MenuScene extends Phaser.Scene {
       stroke: '#ff4444', strokeThickness: 8
     }).setOrigin(0.5);
 
-    this.add.text(cx, cy - 60, '2-Player Co-op', {
-      fontSize: '28px', color: '#aaaaaa'
+    // Mode selection
+    this._playerCount = 2;
+    const opt1 = this.add.text(cx - 110, cy - 60, '1 Player',  { fontSize: '26px', color: '#aaaaaa' }).setOrigin(0.5);
+    const opt2 = this.add.text(cx + 110, cy - 60, '2 Players', { fontSize: '26px', color: '#ffffff' }).setOrigin(0.5);
+
+    const controlsHint = this.add.text(cx, cy + 130, '', { fontSize: '18px', color: '#888888' }).setOrigin(0.5);
+    this.add.text(cx, cy + 165, 'Auto-fire  •  Auto-melee  •  Revive your teammate', {
+      fontSize: '16px', color: '#666666'
     }).setOrigin(0.5);
+
+    const updateMode = () => {
+      opt1.setColor(this._playerCount === 1 ? '#ffffff' : '#aaaaaa');
+      opt2.setColor(this._playerCount === 2 ? '#ffffff' : '#aaaaaa');
+      controlsHint.setText(
+        this._playerCount === 1
+          ? 'Player 1: WASD'
+          : 'Player 1: WASD     Player 2: Arrow Keys'
+      );
+    };
+    updateMode();
 
     const startBtn = this.add.text(cx, cy + 40, '[ PRESS ENTER TO START ]', {
       fontSize: '28px', color: '#44ff44'
     }).setOrigin(0.5);
     this.tweens.add({ targets: startBtn, alpha: 0.2, duration: 600, yoyo: true, repeat: -1 });
 
-    this.add.text(cx, cy + 130, 'Player 1: WASD     Player 2: Arrow Keys', {
-      fontSize: '18px', color: '#888888'
-    }).setOrigin(0.5);
-
-    this.add.text(cx, cy + 165, 'Auto-fire  •  Auto-melee  •  Revive your teammate', {
-      fontSize: '16px', color: '#666666'
-    }).setOrigin(0.5);
-
+    this.input.keyboard.on('keydown-LEFT',  () => { this._playerCount = 1; updateMode(); });
+    this.input.keyboard.on('keydown-RIGHT', () => { this._playerCount = 2; updateMode(); });
     this.input.keyboard.once('keydown-ENTER', () => {
+      this.registry.set('playerCount', this._playerCount);
       this.registry.set('shopManager', createShopManager());
       this.registry.set('bossIndex', 0);
       this.scene.start('CharacterSelectScene');
