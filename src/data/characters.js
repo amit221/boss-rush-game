@@ -2,6 +2,7 @@ export const CHARACTERS = {
   brute: {
     id: 'brute',
     name: 'Brute',
+    textureKey: 'player_brute',
     color: 0x4488ff,
     hp: 150,
     speed: 180,
@@ -14,6 +15,7 @@ export const CHARACTERS = {
   scout: {
     id: 'scout',
     name: 'Scout',
+    textureKey: 'player_scout',
     color: 0xff8844,
     hp: 100,
     speed: 260,
