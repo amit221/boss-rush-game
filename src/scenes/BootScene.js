@@ -3,9 +3,15 @@
 // boss_stormeagle: bat (tile_0120) — no harpy; reads as winged enemy
 // boss_irongolem: cyclops (tile_0109) — armored humanoid stand-in for stone/iron golem
 // bullet: pale flask (tile_0113) — small rounded icon used as orb/projectile
-// floor_tile: solid tan ground (tile_0048) — simple repeating dungeon floor
+function setNearestFilter(scene, textureKey) {
+  const tex = scene.textures.get(textureKey);
+  if (tex && typeof tex.setFilter === 'function') {
+    tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
+  }
+}
 
 function scaleSprite(scene, rawKey, finalKey, w, h) {
+  setNearestFilter(scene, rawKey);
   const rt = scene.add.renderTexture(0, 0, w, h).setVisible(false);
   const img = scene.add.image(0, 0, rawKey)
     .setDisplaySize(w, h)
@@ -13,6 +19,7 @@ function scaleSprite(scene, rawKey, finalKey, w, h) {
     .setVisible(false);
   rt.draw(img, 0, 0);
   rt.saveTexture(finalKey);
+  setNearestFilter(scene, finalKey);
   img.destroy();
   rt.destroy();
 }
@@ -33,7 +40,6 @@ export default class BootScene extends Phaser.Scene {
     this.load.image('_raw_minion', 'assets/sprites/goblin.png');
     this.load.image('_raw_bullet', 'assets/sprites/orb.png');
     this.load.image('_raw_boss_bullet', 'assets/sprites/orb_red.png');
-    this.load.image('_raw_floor_tile', 'assets/sprites/floor.png');
   }
 
   create() {
@@ -50,7 +56,6 @@ export default class BootScene extends Phaser.Scene {
       { raw: '_raw_minion', key: 'minion', w: 32, h: 32 },
       { raw: '_raw_bullet', key: 'bullet', w: 32, h: 32 },
       { raw: '_raw_boss_bullet', key: 'boss_bullet', w: 32, h: 32 },
-      { raw: '_raw_floor_tile', key: 'floor_tile', w: 48, h: 48 },
     ];
 
     SPRITE_MAP.forEach(({ raw, key, w, h }) => scaleSprite(this, raw, key, w, h));
