@@ -1,5 +1,6 @@
 /**
- * Single source of truth for BootScene texture loading (CC0 assets — see specs doc).
+ * Single source of truth for BootScene texture loading (CC0 — see specs doc).
+ * All gameplay sprites: Kenney Tiny Dungeon **only** (one style).
  */
 export const BACKGROUNDS = {
   arena: { key: 'bg_arena', file: 'assets/backgrounds/arena_bg.png' },
