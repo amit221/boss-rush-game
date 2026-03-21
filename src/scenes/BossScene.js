@@ -79,11 +79,12 @@ export default class BossScene extends Phaser.Scene {
     }
 
     // Boss bullets vs players
-    this.physics.add.overlap(this.bossBullets, this.players, (bullet, player) => {
-      if (bullet.active && !player.isDowned) {
+    this.physics.add.overlap(this.bossBullets, this.players, (a, b) => {
+      const bullet = (a.damage !== undefined) ? a : b;
+      const player = (a.damage !== undefined) ? b : a;
+      if (bullet.active && player.takeDamage && !player.isDowned) {
         player.takeDamage(bullet.damage);
         bullet.destroy();
-        // Hit flash
         this.tweens.add({ targets: player, alpha: 0.3, duration: 100, yoyo: true });
       }
     });
