@@ -29,7 +29,9 @@ export default class BossScene extends Phaser.Scene {
 
     // Arena
     this.physics.world.setBounds(0, 0, 1600, 1200);
-    this.add.rectangle(800, 600, 1600, 1200, 0x1a1a2e);
+    this.add.tileSprite(0, 0, 1600, 1200, 'floor_tile')
+      .setOrigin(0, 0)
+      .setDepth(-1);
 
     // Players
     this.player1 = new Player(this, 600, 600, 1, chars[1], this.shopManager);
