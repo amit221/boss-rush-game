@@ -79,6 +79,8 @@ export default class BossScene extends Phaser.Scene {
       if (bullet.active && !player.isDowned) {
         player.takeDamage(bullet.damage);
         bullet.destroy();
+        // Hit flash
+        this.tweens.add({ targets: player, alpha: 0.3, duration: 100, yoyo: true });
       }
     });
 
