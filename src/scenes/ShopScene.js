@@ -12,8 +12,8 @@ export default class ShopScene extends Phaser.Scene {
 
   create() {
     this._sm = this.registry.get('shopManager');
-    this._confirmed = { 1: false, 2: false };
-    this._doneTexts = {};
+    this._playerCount = this.registry.get('playerCount') ?? 2;
+    this._confirmed = { 1: false, 2: this._playerCount === 1 };
     this._buildUI();
     this._setupInput();
   }
@@ -23,8 +23,9 @@ export default class ShopScene extends Phaser.Scene {
     this.add.rectangle(640, 360, 1280, 720, 0x0a0a1a);
     this.add.text(640, 30, 'SHOP', { fontSize: '52px', color: '#ffdd00', fontStyle: 'bold' }).setOrigin(0.5);
 
-    [1, 2].forEach(pid => {
-      const ox = pid === 1 ? 0 : 640;
+    const pids = this._playerCount === 1 ? [1] : [1, 2];
+    pids.forEach(pid => {
+      const ox = this._playerCount === 1 ? 320 : (pid === 1 ? 0 : 640);
       const color = pid === 1 ? '#4488ff' : '#ff8844';
 
       this.add.text(ox + 320, 80, `PLAYER ${pid}`, { fontSize: '24px', color }).setOrigin(0.5);
@@ -77,13 +78,15 @@ export default class ShopScene extends Phaser.Scene {
       });
 
       // Done button
+      const doneColor = this._confirmed?.[pid] ? '#44ff44' : '#ffffff';
       const doneKey = pid === 1 ? 'ENTER' : 'SHIFT';
-      const doneText = this.add.text(ox + 320, 670, `[${doneKey}] Done`, { fontSize: '20px', color: '#ffffff' }).setOrigin(0.5);
-      this._doneTexts[pid] = doneText;
+      this.add.text(ox + 320, 670, `[${doneKey}] Done`, { fontSize: '20px', color: doneColor }).setOrigin(0.5);
     });
 
-    // Center divider
-    this.add.line(640, 360, 0, -360, 0, 360, 0x333333).setLineWidth(2);
+    // Center divider — only in 2P
+    if (this._playerCount === 2) {
+      this.add.line(640, 360, 0, -360, 0, 360, 0x333333).setLineWidth(2);
+    }
   }
 
   _setupInput() {
@@ -93,9 +96,6 @@ export default class ShopScene extends Phaser.Scene {
 
   _confirm(pid) {
     this._confirmed[pid] = true;
-    if (this._doneTexts[pid]) {
-      this._doneTexts[pid].setText(`✓ READY`).setColor('#44ff44');
-    }
     if (this._confirmed[1] && this._confirmed[2]) {
       this.scene.start('BossScene');
     }
