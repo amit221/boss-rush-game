@@ -49,8 +49,7 @@ export default class MenuScene extends Phaser.Scene {
   create() {
     const cx = 640, cy = 360;
 
-    this.add.image(cx, cy, 'bg_menu').setDepth(-10).setDisplaySize(1280, 720);
-    this.add.rectangle(cx, cy, 1280, 720, 0x050510, 0.45).setDepth(-9);
+    this.add.rectangle(cx, cy, 1280, 720, 0x000000).setDepth(-10);
 
     this.add.text(cx, cy - 150, 'BOSS RUSH', {
       fontFamily: FONT_FAMILY,

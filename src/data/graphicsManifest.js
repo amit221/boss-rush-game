@@ -1,11 +1,8 @@
 /**
  * Single source of truth for BootScene texture loading (CC0 — see specs doc).
  * All gameplay sprites: Kenney Tiny Dungeon **only** (one style).
+ * Backgrounds are solid black in scenes (no noisy PNGs / tiled floor grid).
  */
-export const BACKGROUNDS = {
-  arena: { key: 'bg_arena', file: 'assets/backgrounds/arena_bg.png' },
-  menu: { key: 'bg_menu', file: 'assets/backgrounds/menu_bg.png' },
-};
 
 /** Keyed by BOSS_ORDER / BOSS_CLASSES names */
 export const bossTextures = {
@@ -29,5 +26,4 @@ export const sharedBattleTextures = [
   { file: 'assets/sprites/minion.png', key: 'minion', w: 32, h: 32 },
   { file: 'assets/sprites/orb.png', key: 'bullet', w: 32, h: 32 },
   { file: 'assets/sprites/orb_red.png', key: 'boss_bullet', w: 32, h: 32 },
-  { file: 'assets/sprites/floor.png', key: 'floor_tile', w: 48, h: 48 },
 ];

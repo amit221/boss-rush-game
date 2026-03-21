@@ -5,8 +5,7 @@ export default class GameOverScene extends Phaser.Scene {
 
   create() {
     const cx = 640, cy = 360;
-    this.add.image(cx, cy, 'bg_menu').setDepth(-10).setDisplaySize(1280, 720);
-    this.add.rectangle(cx, cy, 1280, 720, 0x2a0000, 0.7).setDepth(-9);
+    this.add.rectangle(cx, cy, 1280, 720, 0x000000).setDepth(-10);
     this.add.text(cx, cy - 100, 'GAME OVER', {
       fontFamily: FONT_FAMILY,
       fontSize: '32px', color: '#ff4444',

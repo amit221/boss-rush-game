@@ -21,8 +21,7 @@ export default class ShopScene extends Phaser.Scene {
 
   _buildUI() {
     const sm = this._sm;
-    this.add.image(640, 360, 'bg_menu').setDepth(-10).setDisplaySize(1280, 720);
-    this.add.rectangle(640, 360, 1280, 720, 0x050510, 0.6).setDepth(-9);
+    this.add.rectangle(640, 360, 1280, 720, 0x000000).setDepth(-10);
     this.add.text(640, 30, 'SHOP', { fontFamily: FONT_FAMILY, fontSize: '28px', color: '#ffdd00' }).setOrigin(0.5);
 
     const pids = this._playerCount === 1 ? [1] : [1, 2];

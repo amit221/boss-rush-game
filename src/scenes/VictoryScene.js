@@ -5,8 +5,7 @@ export default class VictoryScene extends Phaser.Scene {
 
   create() {
     const cx = 640, cy = 360;
-    this.add.image(cx, cy, 'bg_menu').setDepth(-10).setDisplaySize(1280, 720);
-    this.add.rectangle(cx, cy, 1280, 720, 0x0a0a00, 0.65).setDepth(-9);
+    this.add.rectangle(cx, cy, 1280, 720, 0x000000).setDepth(-10);
     this.add.text(cx, cy - 110, 'VICTORY!', {
       fontFamily: FONT_FAMILY,
       fontSize: '36px', color: '#ffdd00',

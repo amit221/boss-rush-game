@@ -12,8 +12,7 @@ export default class CharacterSelectScene extends Phaser.Scene {
     this._playerCount = this.registry.get('playerCount') ?? 2;
     this._p2Els = [];
 
-    this.add.image(640, 360, 'bg_menu').setDepth(-10).setDisplaySize(1280, 720);
-    this.add.rectangle(640, 360, 1280, 720, 0x0a0a18, 0.55).setDepth(-9);
+    this.add.rectangle(640, 360, 1280, 720, 0x000000).setDepth(-10);
 
     this.add.text(640, 35, 'SELECT YOUR CHARACTER', {
       fontFamily: FONT_FAMILY,

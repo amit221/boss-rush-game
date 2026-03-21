@@ -1,6 +1,8 @@
 # Graphics visual polish — asset sources (CC0)
 
-**Policy (feat/visual-polish):** **Kenney Tiny Dungeon only** — one pack, one pixel-art style. No mixing with Abstract Platformer or other Kenney packs.
+**Policy (feat/visual-polish):** **Kenney Tiny Dungeon only** — one pack, one pixel-art style.
+
+**Backgrounds:** Scenes use **solid black** (`0x000000`) — no full-screen bitmaps (avoids noisy sample art) and **no** repeating floor tile grid.
 
 All assets are **Creative Commons CC0** (public domain). Attribution optional.
 
@@ -8,15 +10,6 @@ All assets are **Creative Commons CC0** (public domain). Attribution optional.
 
 - **Source:** [Tiny Dungeon · Kenney](https://kenney.nl/assets/tiny-dungeon)  
 - **Mirror used:** OpenGameArt `kenney_tinydungeon.zip` (or Kenney direct download)
-
-### Backgrounds
-
-| File in repo | Source in pack |
-|--------------|----------------|
-| `assets/backgrounds/menu_bg.png` | `Sample.png` (sample dungeon map — same for menu & arena mood) |
-| `assets/backgrounds/arena_bg.png` | `Sample.png` |
-
-Arena/menu scenes apply a dark **overlay** in Phaser so UI text stays readable.
 
 ### Sprites (`Tiles/*.png` — 16×16)
 
@@ -34,7 +27,6 @@ Arena/menu scenes apply a dark **overlay** in Phaser so UI text stays readable.
 | `minion.png` | `tile_0123.png` | Small critter |
 | `orb.png` | `tile_0113.png` | Player projectile |
 | `orb_red.png` | `tile_0115.png` | Boss projectile |
-| `floor.png` | `tile_0048.png` | Floor tile overlay (optional) |
 
 ### Rendering
 

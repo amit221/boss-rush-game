@@ -1,5 +1,4 @@
 import {
-  BACKGROUNDS,
   bossTextures,
   characterTextures,
   sharedBattleTextures,
@@ -30,10 +29,6 @@ export default class BootScene extends Phaser.Scene {
   constructor() { super('BootScene'); }
 
   preload() {
-    Object.values(BACKGROUNDS).forEach(({ key, file }) => {
-      this.load.image(key, file);
-    });
-
     const queue = [
       ...Object.values(characterTextures),
       ...Object.values(bossTextures),
@@ -45,8 +40,6 @@ export default class BootScene extends Phaser.Scene {
   }
 
   create() {
-    Object.values(BACKGROUNDS).forEach(({ key }) => setNearestFilter(this, key));
-
     const scaled = [
       ...Object.values(characterTextures),
       ...Object.values(bossTextures),
