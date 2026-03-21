@@ -8,7 +8,8 @@ export default class GameOverScene extends Phaser.Scene {
       fontSize: '80px', color: '#ff4444', fontStyle: 'bold',
       stroke: '#880000', strokeThickness: 8
     }).setOrigin(0.5);
-    this.add.text(cx, cy, 'Both heroes fell...', {
+    const playerCount = this.registry.get('playerCount') ?? 2;
+    this.add.text(cx, cy, playerCount === 1 ? 'Your hero fell...' : 'Both heroes fell...', {
       fontSize: '28px', color: '#aaaaaa'
     }).setOrigin(0.5);
     const retry = this.add.text(cx, cy + 110, '[ ENTER to Try Again ]', {
