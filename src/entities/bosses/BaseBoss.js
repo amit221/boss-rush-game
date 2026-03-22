@@ -1,3 +1,16 @@
+import { shouldBossBeDefeated } from './bossDefeatLogic.js';
+
+const BOSS_AURA_COLORS = {
+  boss_kingslime:   0x44ff22,  // slime green
+  boss_pyroskull:   0xff6600,  // fire orange
+  boss_stormeagle:  0x6688ff,  // lightning blue
+  boss_irongolem:   0x888888,  // steel gray
+  boss_shadowmimic: 0x880033,  // shadow crimson
+  boss_kraken:      0x0088ff,  // ocean blue
+  boss_voidgod:     0xaa00ff,  // void purple
+};
+const DEFAULT_AURA_COLOR = 0xffaa44; // fallback
+
 export default class BaseBoss extends Phaser.Physics.Arcade.Sprite {
   constructor(scene, x, y, textureKey, config) {
     super(scene, x, y, textureKey);
@@ -10,6 +23,22 @@ export default class BaseBoss extends Phaser.Physics.Arcade.Sprite {
     this.phase = 1;
 
     this._createHpBar(scene);
+
+    // Create per-boss colored glow aura
+    const auraColor = BOSS_AURA_COLORS[textureKey] ?? DEFAULT_AURA_COLOR;
+    this._auraColor = auraColor;
+    this._auraGfx = scene.add.graphics();
+    this._auraGfx.setDepth(this.depth - 1);
+
+    // Pulsing tween on aura alpha (0.4 → 1.0 → 0.4, 1500ms yoyo loop)
+    scene.tweens.add({
+      targets: this._auraGfx,
+      alpha: { from: 0.4, to: 1.0 },
+      duration: 1500,
+      yoyo: true,
+      repeat: -1,
+    });
+
     this.setCollideWorldBounds(true);
   }
 
@@ -40,7 +69,14 @@ export default class BaseBoss extends Phaser.Physics.Arcade.Sprite {
     this.hp = Math.max(0, this.hp - amount);
     this._updateHpBar();
     this._checkPhase();
-    if (this.hp <= 0) this.emit('defeated');
+    this._checkDefeated();
+  }
+
+  _checkDefeated() {
+    if (shouldBossBeDefeated(this.hp, this._defeatedEmitted)) {
+      this._defeatedEmitted = true;
+      this.emit('defeated');
+    }
   }
 
   _checkPhase() {
@@ -69,6 +105,14 @@ export default class BaseBoss extends Phaser.Physics.Arcade.Sprite {
   updateBoss(time, delta, players) {}
 
   update(time, delta, players) {
+    // Update aura position and appearance
+    if (this._auraGfx && this._auraGfx.active) {
+      this._auraGfx.clear();
+      this._auraGfx.lineStyle(5, this._auraColor, 0.85);
+      this._auraGfx.strokeCircle(this.x, this.y, this.displayWidth * 0.55);
+    }
+
+    this._checkDefeated(); // Safety net: catch 0 HP even if takeDamage missed it
     this.updateBoss(time, delta, players);
     // _updateHpBar is called inside takeDamage — no need here
   }
@@ -76,6 +120,7 @@ export default class BaseBoss extends Phaser.Physics.Arcade.Sprite {
   destroy() {
     this._hpBarBg?.destroy();
     this._hpBarFill?.destroy();
+    this._auraGfx?.destroy();
     super.destroy();
   }
 }
