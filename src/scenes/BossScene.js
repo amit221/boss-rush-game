@@ -303,7 +303,7 @@ export default class BossScene extends Phaser.Scene {
     this._p1HpBar = this.add.rectangle(20, y, barW, barH, 0x44ff22).setScrollFactor(0).setDepth(100).setOrigin(0, 0.5);
     if (this._playerCount === 2) {
       track(760, 2);
-      this._p2HpBar = this.add.rectangle(660, y, barW, barH, 0x44ff88).setScrollFactor(0).setDepth(100).setOrigin(0, 0.5);
+      this._p2HpBar = this.add.rectangle(660, y, barW, barH, 0x44ff22).setScrollFactor(0).setDepth(100).setOrigin(0, 0.5);
     }
   }
 
