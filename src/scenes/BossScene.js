@@ -425,6 +425,7 @@ export default class BossScene extends Phaser.Scene {
     b.damage = damage;
     this.physics.velocityFromAngle(angleDeg, speed, b.body.velocity);
     this.time.delayedCall(3000, () => { if (b.active) b.destroy(); });
+    bulletTrail(this, b, { bulletTexture: 'boss_bullet', trailColor: 0xff4400, trailFrequency: 40 });
   }
 
   _onClonesSpawned(clones) {
