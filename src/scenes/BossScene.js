@@ -1,6 +1,27 @@
 import Player from '../entities/Player.js';
-import { BOSS_CLASSES, BOSS_ORDER } from '../data/bosses.js';
+import { BOSS_CLASSES, BOSS_ORDER, BOSS_LABELS } from '../data/bosses.js';
 import { WEAPONS } from '../data/weapons.js';
+import { recordBossDefeated } from '../persistence/bossUnlocks.js';
+import { FONT_FAMILY, COLORS } from '../ui/theme.js';
+import { ensureBgm } from '../audio/music.js';
+import { createAudioControls } from '../ui/audioControls.js';
+import {
+  hitBurst,
+  hitDispatch,
+  bulletTrail,
+  meleeArc,
+  hurtSparks,
+  deathPopParticles,
+  meleeConeParticles,
+  bossDefeatParticles,
+  shakeCameras,
+  playHitRanged,
+  playHitMelee,
+  playHitArmor,
+  playPlayerHurt,
+  playMinionDie,
+  playBossDefeat,
+} from '../fx/combatFx.js';
 
 function dist(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -24,14 +45,72 @@ export default class BossScene extends Phaser.Scene {
     const reg = this.registry;
     this.bossIndex = reg.get('bossIndex') ?? 0;
     this.shopManager = reg.get('shopManager');
-    this._playerCount = reg.get('playerCount') ?? 2;
+    this._playerCount = reg.get('playerCount') ?? 1;
     const chars = reg.get('selectedCharacters') ?? { 1: 'brute', 2: 'scout' };
 
-    // Arena — black void behind playfield; tiled floor (no stretched bitmap BG / noisy grid)
+    // Arena — black void; Kenney Tiny Dungeon floor tile (CC0), tiled
     this.physics.world.setBounds(0, 0, 1600, 1200);
     this.add.rectangle(800, 600, 1600, 1200, 0x000000).setOrigin(0.5).setDepth(-3);
     const floor = this.add.tileSprite(800, 600, 1600, 1200, 'arena_floor').setOrigin(0.5).setDepth(-2);
-    floor.setTint(0x6a5a4a);
+    // Native tile is 16×16; scale up to match previous 64×64 “gameplay” tile size
+    floor.setTileScale(4, 4);
+    floor.setTint(0xb0906a);
+
+    // Stone wall border (world-space, no scrollFactor override)
+    const walls = this.add.graphics().setDepth(-1);
+    walls.fillStyle(0x2a1800, 1);
+    walls.fillRect(0, 0, 1600, 48);
+    walls.fillRect(0, 1152, 1600, 48);
+    walls.fillRect(0, 0, 48, 1200);
+    walls.fillRect(1552, 0, 48, 1200);
+    walls.lineStyle(2, 0x5a3010, 1);
+    walls.strokeRect(0, 0, 1600, 1200);
+
+    // Vignette overlay (viewport-fixed)
+    const vignette = this.add.graphics().setScrollFactor(0).setDepth(54);
+    vignette.fillGradientStyle(0x050200, 0x050200, 0x000000, 0x000000, 0.65, 0.65, 0, 0);
+    vignette.fillRect(0, 0, 1280, 180);
+    vignette.fillGradientStyle(0x000000, 0x000000, 0x050200, 0x050200, 0, 0, 0.65, 0.65);
+    vignette.fillRect(0, 540, 1280, 180);
+    vignette.fillGradientStyle(0x050200, 0x000000, 0x050200, 0x000000, 0.65, 0, 0.65, 0);
+    vignette.fillRect(0, 0, 180, 720);
+    vignette.fillGradientStyle(0x000000, 0x050200, 0x000000, 0x050200, 0, 0.65, 0, 0.65);
+    vignette.fillRect(1100, 0, 180, 720);
+
+    // Torch particle emitters at arena corners
+    const torchPositions = [[80, 80], [1520, 80], [80, 1120], [1520, 1120]];
+    torchPositions.forEach(([tx, ty]) => {
+      this.add.particles(tx, ty, 'orb', {
+        speed: { min: 20, max: 60 },
+        angle: { min: 250, max: 290 },
+        scale: { start: 0.35, end: 0 },
+        alpha: { start: 0.9, end: 0 },
+        lifespan: 800,
+        frequency: 60,
+        quantity: 2,
+        tint: [0xff8800, 0xffcc44, 0xff4400],
+        blendMode: 'ADD',
+        depth: 55,
+      });
+    });
+
+    // Ambient ember particles rising across the arena
+    this.add.particles(800, 1100, 'orb', {
+      speed: { min: 5, max: 25 },
+      angle: { min: 260, max: 280 },
+      scale: { start: 0.2, end: 0 },
+      alpha: { start: 0.5, end: 0 },
+      lifespan: { min: 2500, max: 4500 },
+      frequency: 400,
+      quantity: 1,
+      tint: 0xff8800,
+      blendMode: 'ADD',
+      emitZone: {
+        type: 'random',
+        source: new Phaser.Geom.Rectangle(-750, -100, 1500, 100)
+      },
+      depth: 10,
+    });
 
     // Players
     this.player1 = new Player(this, 600, 600, 1, chars[1], this.shopManager);
@@ -67,6 +146,11 @@ export default class BossScene extends Phaser.Scene {
       p.on('downed', this._onPlayerDowned, this);
       p.on('fire', this._onPlayerFire, this);
       p.on('melee', this._onPlayerMelee, this);
+      p.on('hurt', (player) => {
+        hurtSparks(this, player.x, player.y);
+        playPlayerHurt(this);
+        shakeCameras(this, 90, 0.0045);
+      });
     });
 
     // Bullet vs boss — use closure ref to avoid Phaser arg-order ambiguity
@@ -74,8 +158,18 @@ export default class BossScene extends Phaser.Scene {
       this.physics.add.overlap(this.bullets, this.boss, (a, b) => {
         const bullet = (a.damage !== undefined) ? a : b;
         if (bullet.active) {
+          const ix = bullet.x;
+          const iy = bullet.y;
+          const vx = bullet.body?.velocity?.x ?? 1;
+          const vy = bullet.body?.velocity?.y ?? 0;
+          const angleDeg = Math.atan2(vy, vx) * 180 / Math.PI;
+          const hitColor = bullet._hitColor ?? 0xffcc66;
+          const hitStyle = bullet._hitStyle ?? 'burst';
           this.boss.takeDamage(bullet.damage, true); // true = isRanged
           bullet.destroy();
+          hitDispatch(this, ix, iy, hitStyle, hitColor, angleDeg);
+          playHitRanged(this);
+          playHitArmor(this);
         }
       });
     }
@@ -97,14 +191,36 @@ export default class BossScene extends Phaser.Scene {
       const minion = (a.damage !== undefined) ? b : a;
       if (bullet.active && minion.active) {
         minion.hp -= bullet.damage;
+        const mx = minion.x;
+        const my = minion.y;
+        const vx = bullet.body?.velocity?.x ?? 1;
+        const vy = bullet.body?.velocity?.y ?? 0;
+        const angleDeg = Math.atan2(vy, vx) * 180 / Math.PI;
+        const hitColor = bullet._hitColor ?? 0xaa8866;
+        const hitStyle = bullet._hitStyle ?? 'burst';
         bullet.destroy();
-        if (minion.hp <= 0) minion.destroy();
+        if (minion.hp <= 0) {
+          deathPopParticles(this, mx, my);
+          playMinionDie(this);
+          minion.destroy();
+        } else {
+          hitDispatch(this, mx, my, hitStyle, hitColor, angleDeg);
+          playHitRanged(this);
+        }
       }
     });
 
     // Split-screen cameras
     this._setupCameras();
     this._setupHUD();
+
+    this.add.text(640, 14, 'ESC — character select', {
+      fontFamily: FONT_FAMILY,
+      fontSize: '8px', color: '#555566',
+    }).setScrollFactor(0).setDepth(150);
+    this.input.keyboard.once('keydown-ESC', () => {
+      this.scene.start('CharacterSelectScene');
+    });
 
     // Timing for coin awards
     this._bossStartTime = this.time.now;
@@ -114,10 +230,19 @@ export default class BossScene extends Phaser.Scene {
     this._p2Survived = true;
 
     // Show boss name
-    const bossNameText = this.add.text(640, 360, bossName.replace(/([A-Z])/g, ' $1').trim(), {
-      fontSize: '48px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 6
+    const bossLabel = BOSS_LABELS[bossName] ?? bossName.replace(/([A-Z])/g, ' $1').trim();
+    const bossNameText = this.add.text(640, 360, bossLabel, {
+      fontFamily: FONT_FAMILY,
+      fontSize: '26px',
+      color: '#ffdd99',
+      stroke: '#2a1810',
+      strokeThickness: 8,
+      shadow: { offsetX: 2, offsetY: 2, color: '#000000', blur: 4, fill: true },
     }).setOrigin(0.5).setScrollFactor(0).setDepth(200);
-    this.tweens.add({ targets: bossNameText, alpha: 0, delay: 2000, duration: 1000, onComplete: () => bossNameText.destroy() });
+    this.tweens.add({ targets: bossNameText, alpha: 0, delay: 2200, duration: 900, onComplete: () => bossNameText.destroy() });
+
+    ensureBgm(this, 'music_battle');
+    createAudioControls(this);
   }
 
   _spawnPlaceholderBoss(name) {
@@ -154,7 +279,7 @@ export default class BossScene extends Phaser.Scene {
       this.cam2 = this.cameras.add(640, 0, 640, 720);
       this.cam2.setBounds(0, 0, 1600, 1200);
       this.cam2.startFollow(this.player2);
-      this.add.rectangle(640, 360, 4, 720, 0xffffff).setScrollFactor(0).setDepth(200);
+      this.add.rectangle(640, 360, 3, 720, 0x3a4860, 0.9).setScrollFactor(0).setDepth(200);
     } else {
       this.cameras.main.setViewport(0, 0, 1280, 720);
       this.cameras.main.setBounds(0, 0, 1600, 1200);
@@ -163,35 +288,63 @@ export default class BossScene extends Phaser.Scene {
   }
 
   _setupHUD() {
-    this.add.rectangle(120, 700, 200, 14, 0x333333).setScrollFactor(0).setDepth(99);
-    this._p1HpBar = this.add.rectangle(20, 700, 200, 14, 0x44ff44).setScrollFactor(0).setDepth(100).setOrigin(0, 0.5);
-    this._p1Label = this.add.text(20, 685, 'P1', { fontSize: '12px', color: '#4488ff' }).setScrollFactor(0).setDepth(100);
+    const barW = 200;
+    const barH = 12;
+    const y = 700;
+    const track = (cx, pid) => {
+      this.add.rectangle(cx, y, barW + 10, 28, 0x0c0a12, 0.92).setStrokeStyle(2, COLORS.strokeDim).setScrollFactor(0).setDepth(98);
+      this.add.text(cx - barW / 2, y - 28, `P${pid}`, {
+        fontFamily: FONT_FAMILY,
+        fontSize: '10px',
+        color: pid === 1 ? '#88ccff' : '#ffaa77',
+      }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(100);
+    };
+    track(120, 1);
+    this._p1HpBar = this.add.rectangle(20, y, barW, barH, 0x44ff88).setScrollFactor(0).setDepth(100).setOrigin(0, 0.5);
     if (this._playerCount === 2) {
-      this.add.rectangle(760, 700, 200, 14, 0x333333).setScrollFactor(0).setDepth(99);
-      this._p2HpBar = this.add.rectangle(660, 700, 200, 14, 0x44ff44).setScrollFactor(0).setDepth(100).setOrigin(0, 0.5);
-      this._p2Label = this.add.text(660, 685, 'P2', { fontSize: '12px', color: '#ff8844' }).setScrollFactor(0).setDepth(100);
+      track(760, 2);
+      this._p2HpBar = this.add.rectangle(660, y, barW, barH, 0x44ff88).setScrollFactor(0).setDepth(100).setOrigin(0, 0.5);
     }
   }
 
+  _hpBarColor(ratio) {
+    const r = Math.round(255 - ratio * 187);
+    const g = Math.round(68 + ratio * 187);
+    const b = Math.round(68 + ratio * 40);
+    return (r << 16) | (g << 8) | b;
+  }
+
   _updateHUD() {
-    this._p1HpBar.scaleX = Math.max(0, this.player1.hp / this.player1.maxHp);
+    const r1 = Math.max(0, this.player1.hp / this.player1.maxHp);
+    this._p1HpBar.scaleX = r1;
+    this._p1HpBar.setFillStyle(this._hpBarColor(r1));
     if (this._playerCount === 2) {
-      this._p2HpBar.scaleX = Math.max(0, this.player2.hp / this.player2.maxHp);
+      const r2 = Math.max(0, this.player2.hp / this.player2.maxHp);
+      this._p2HpBar.scaleX = r2;
+      this._p2HpBar.setFillStyle(this._hpBarColor(r2));
     }
   }
 
   _onPlayerFire(player, target) {
     const weapon = player.weaponData;
+    const visuals = weapon.visuals ?? {};
     const angles = this._getBulletAngles(player, target, weapon);
     const dmgPerBullet = calculateDamage(player.charData.rangedDamage, weapon.damageMultiplier, player.damageUpgradeCount);
 
     angles.forEach(angleDeg => {
-      const b = this.bullets.create(player.x, player.y, 'bullet');
+      const texKey = visuals.bulletTexture ?? 'bullet';
+      const b = this.bullets.create(player.x, player.y, texKey);
       if (!b) return;
-      b.setDisplaySize(8, 8);
+      const [bw, bh] = visuals.bulletSize ?? [8, 8];
+      b.setDisplaySize(bw, bh);
+      b.body.setSize(8, 8);
+      if (visuals.bulletRotate) b.setAngularVelocity(360);
+      b._hitColor = visuals.hitColor ?? 0xffcc66;
+      b._hitStyle = visuals.hitStyle ?? 'burst';
       b.damage = dmgPerBullet;
       this.physics.velocityFromAngle(angleDeg, weapon.bulletSpeed, b.body.velocity);
       this.time.delayedCall(weapon.range / weapon.bulletSpeed * 1000, () => { if (b.active) b.destroy(); });
+      if (visuals.trailColor) bulletTrail(this, b, visuals);
       // Track damage per created bullet
       if (player.playerId === 1) this._p1Damage += dmgPerBullet;
       else this._p2Damage += dmgPerBullet; // stays 0 in 1P mode; _onBossDefeated only reads it for pid=2
@@ -208,6 +361,9 @@ export default class BossScene extends Phaser.Scene {
 
   _onPlayerMelee(player, target) {
     const dmg = calculateDamage(player.charData.meleeDamage, player.weaponData.damageMultiplier, player.damageUpgradeCount);
+    const ang = Phaser.Math.Angle.Between(player.x, player.y, target.x, target.y);
+    meleeArc(this, player.x, player.y, ang);
+    meleeConeParticles(this, player.x, player.y, ang);
     if (typeof target.takeDamage === 'function') {
       target.takeDamage(dmg);
     } else if (target.hp !== undefined) {
@@ -216,6 +372,12 @@ export default class BossScene extends Phaser.Scene {
     }
     if (player.playerId === 1) this._p1Damage += dmg;
     else this._p2Damage += dmg; // stays 0 in 1P mode; _onBossDefeated only reads it for pid=2
+
+    const vsBoss = this.boss && target === this.boss;
+    hitBurst(this, target.x, target.y, vsBoss ? 0xffaa66 : 0xdd9966);
+    playHitMelee(this);
+    if (vsBoss) playHitArmor(this);
+    shakeCameras(this, 55, 0.0028);
 
     // Hit flash on target
     this.tweens.add({ targets: target, alpha: 0.3, duration: 80, yoyo: true });
@@ -248,8 +410,15 @@ export default class BossScene extends Phaser.Scene {
     clones.forEach(clone => {
       this.physics.add.overlap(this.bullets, clone, (bullet, cl) => {
         if (bullet.active && cl.active && cl.takeDamage) {
+          const ix = bullet.x;
+          const iy = bullet.y;
+          const vx = bullet.body?.velocity?.x ?? 1;
+          const vy = bullet.body?.velocity?.y ?? 0;
+          const angleDeg = Math.atan2(vy, vx) * 180 / Math.PI;
           cl.takeDamage(bullet.damage);
           bullet.destroy();
+          hitDispatch(this, ix, iy, bullet._hitStyle ?? 'burst', 0xcc88ff, angleDeg);
+          playHitRanged(this);
         }
       });
     });
@@ -303,14 +472,24 @@ export default class BossScene extends Phaser.Scene {
   _onBossDefeated() {
     if (this._bossDefeated) return;
     this._bossDefeated = true;
+    playBossDefeat(this);
+    const bx = this.boss && this.boss.active ? this.boss.x : 800;
+    const by = this.boss && this.boss.active ? this.boss.y : 300;
+    bossDefeatParticles(this, bx, by);
+    shakeCameras(this, 320, 0.014);
+    this.cameras.main.flash(220, 255, 230, 140, false, undefined, 0.22);
+    if (this.cam2) this.cam2.flash(220, 255, 230, 140, false, undefined, 0.22);
     const elapsed = (this.time.now - this._bossStartTime) / 1000;
     const totalDamage = this._p1Damage + this._p2Damage;
 
+    const chars = this.registry.get('selectedCharacters') ?? { 1: 'brute', 2: 'scout' };
     const pids = this._playerCount === 2 ? [1, 2] : [1];
     pids.forEach(pid => {
+      const charId = chars[pid];
+      if (!charId) return;
       const myDamage = pid === 1 ? this._p1Damage : this._p2Damage;
       const survived = pid === 1 ? this._p1Survived : this._p2Survived;
-      this.shopManager.awardBossCoins(pid, {
+      this.shopManager.awardBossCoins(charId, {
         survived,
         underTime: elapsed < 90,
         mostDamage: totalDamage > 0 && (myDamage / totalDamage) >= 0.5
@@ -319,6 +498,7 @@ export default class BossScene extends Phaser.Scene {
 
     const nextIndex = this.bossIndex + 1;
     this.registry.set('bossIndex', nextIndex);
+    recordBossDefeated(this.bossIndex);
 
     this.time.delayedCall(1500, () => {
       if (nextIndex >= BOSS_ORDER.length) {
@@ -330,7 +510,6 @@ export default class BossScene extends Phaser.Scene {
   }
 
   _gameOver() {
-    this.shopManager.reset();
     this.registry.set('bossIndex', 0);
     this.scene.start('GameOverScene');
   }
@@ -339,6 +518,12 @@ export default class BossScene extends Phaser.Scene {
     this._checkRevive(delta);
     this._updateHUD();
     if (!this.boss) return;
+
+    // Safety net: boss at 0 HP must trigger defeat (handles event/listener failures)
+    if (this.boss.hp !== undefined && (this.boss.hp <= 0 || this.boss.hp < 0.01) && !this._bossDefeated) {
+      this._onBossDefeated();
+      return;
+    }
 
     const allMinions = [
       ...this.minions.getChildren().filter(m => m.active),
