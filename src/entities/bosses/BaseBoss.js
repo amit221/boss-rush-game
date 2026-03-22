@@ -53,7 +53,7 @@ export default class BaseBoss extends Phaser.Physics.Arcade.Sprite {
 
     // Left-anchored fill bar — set x to left edge, origin to (0, 0.5)
     this._hpBarFill = scene.add.rectangle(
-      barX, barY + 10, barWidth, 20, 0xff4444
+      barX, barY + 10, barWidth, 20, 0xff4400
     ).setScrollFactor(0).setDepth(101);
     this._hpBarFill.setOrigin(0, 0.5);
 

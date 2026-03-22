@@ -292,7 +292,7 @@ export default class BossScene extends Phaser.Scene {
     const barH = 12;
     const y = 700;
     const track = (cx, pid) => {
-      this.add.rectangle(cx, y, barW + 10, 28, 0x0c0a12, 0.92).setStrokeStyle(2, COLORS.strokeDim).setScrollFactor(0).setDepth(98);
+      this.add.rectangle(cx, y, barW + 10, 28, 0x0f0800, 0.92).setStrokeStyle(2, COLORS.strokeDim).setScrollFactor(0).setDepth(98);
       this.add.text(cx - barW / 2, y - 28, `P${pid}`, {
         fontFamily: FONT_FAMILY,
         fontSize: '10px',
@@ -300,7 +300,7 @@ export default class BossScene extends Phaser.Scene {
       }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(100);
     };
     track(120, 1);
-    this._p1HpBar = this.add.rectangle(20, y, barW, barH, 0x44ff88).setScrollFactor(0).setDepth(100).setOrigin(0, 0.5);
+    this._p1HpBar = this.add.rectangle(20, y, barW, barH, 0x44ff22).setScrollFactor(0).setDepth(100).setOrigin(0, 0.5);
     if (this._playerCount === 2) {
       track(760, 2);
       this._p2HpBar = this.add.rectangle(660, y, barW, barH, 0x44ff88).setScrollFactor(0).setDepth(100).setOrigin(0, 0.5);
@@ -308,10 +308,32 @@ export default class BossScene extends Phaser.Scene {
   }
 
   _hpBarColor(ratio) {
-    const r = Math.round(255 - ratio * 187);
-    const g = Math.round(68 + ratio * 187);
-    const b = Math.round(68 + ratio * 40);
-    return (r << 16) | (g << 8) | b;
+    // Full HP: green (0x44ff22) → 75%: yellow (0xffcc22) → 50%: orange (0xff8800) → 25%: fire red (0xff3300)
+    if (ratio > 0.75) {
+      // Green to yellow
+      const t = (ratio - 0.75) / 0.25;
+      const r = Math.round(68 + (1 - t) * 187);
+      const g = Math.round(255 - (1 - t) * 51);
+      const b = Math.round(34 * t);
+      return (r << 16) | (g << 8) | b;
+    } else if (ratio > 0.5) {
+      // Yellow to orange
+      const t = (ratio - 0.5) / 0.25;
+      const r = 255;
+      const g = Math.round(136 + t * 68);
+      const b = 0;
+      return (r << 16) | (g << 8) | b;
+    } else if (ratio > 0.25) {
+      // Orange to fire red
+      const t = (ratio - 0.25) / 0.25;
+      const r = 255;
+      const g = Math.round(t * 136);
+      const b = 0;
+      return (r << 16) | (g << 8) | b;
+    } else {
+      // Fire red
+      return 0xff3300;
+    }
   }
 
   _updateHUD() {
