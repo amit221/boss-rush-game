@@ -31,7 +31,7 @@ Increase difficulty and economy depth by keeping **minions boss-driven** (no glo
 ## Pickup Behavior
 
 1. **Spawn:** On death of a loot-eligible minion, create one pickup at `(minion.x, minion.y)` (after or with existing death FX / `playMinionDie`).
-2. **Collection:** Overlap between pickup and each **Player** body that is **not downed** (`!player.isDowned`); downed players **cannot** collect. On first valid overlap → `addCoins` for that player’s **character id** (from registry `selectedCharacters`), destroy pickup, optional short collect SFX/FX.
+2. **Collection:** Overlap between pickup and each **Player** body that is **not downed** (`!player.isDowned`); downed players **cannot** collect. On first valid overlap → `addCoins` for that player’s **character id** — use the same id the `Player` was constructed with (must match `selectedCharacters[pid]`); destroy pickup, optional short collect SFX/FX.
 3. **Concurrency (2P):** If two players could overlap the same pickup in one frame, implementation must be **idempotent** (e.g. destroy pickup immediately or guard with `active` flag) so coins are not awarded twice. If both qualify in the same physics step, **deterministic tie-break:** lower `playerId` wins (P1 before P2) so behavior is stable and testable.
 4. **Despawn:** Pickups **expire** after a tunable duration (recommended **10–20 seconds**) if uncollected, to avoid clutter and accidental hoarding. Destroy without awarding coins.
 5. **Presentation:** Minimal **static** pickup (small sprite or generated shape + gold tint) with optional **short float-up** tween; no magnet.
@@ -43,6 +43,7 @@ Increase difficulty and economy depth by keeping **minions boss-driven** (no glo
 - **Bullets:** Existing overlap already reduces `hp` and destroys at 0.
 - **Melee:** `_onPlayerMelee` can kill minions via `target.hp` without the bullet path’s FX/SFX/coin logic.
 - **Requirement:** Both paths funnel through a **single helper** (e.g. `_handleMinionDamaged` / `_onMinionDeath`) so loot, particles, and SFX stay consistent whenever a loot-eligible minion reaches 0 HP.
+- **Pickup creation** runs only when HP hits **0 from combat** inside that helper — **not** on arbitrary `destroy()`, group clear, or scene shutdown (no global `destroy` listeners for loot).
 
 ---
 
@@ -56,7 +57,8 @@ Increase difficulty and economy depth by keeping **minions boss-driven** (no glo
 ## Balance (Guidance)
 
 - Boss clear still awards **`awardBossCoins`** (e.g. base ~100 + bonuses); minion drops are **supplementary**.
-- Start with a **fixed small value** per eligible kill (e.g. **5–15** coins), **same for all bosses** unless a later pass introduces per-boss scaling; tune so a typical fight’s adds don’t dwarf boss rewards.
+- **v1:** One **integer constant** per kill (pick a value in the **5–15** band after playtest), **not** a random roll per drop. **Same for all bosses** unless a later pass introduces per-boss scaling; tune so a typical fight’s adds don’t dwarf boss rewards.
+- **Persistence:** Each collection calls `addCoins` (which saves). Many adds ⇒ more `save` calls; acceptable for v1; batching/debouncing is optional future optimization.
 
 ---
 
