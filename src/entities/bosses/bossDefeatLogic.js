@@ -1,12 +1,15 @@
 /**
+ * Single defeat threshold for all boss HP: BaseBoss subclasses, ShadowMimic clones,
+ * BossScene placeholder boss, and BossScene’s `shouldBossBeDefeated` safety check.
  * True when remaining HP is effectively zero (float residue or invisible on the bar).
- * Bosses use large maxHp (900+); sub-1 HP or <0.01% of max is not a real fight state.
+ * Bosses use large maxHp (900+); integer 1 HP after damage must still count as dead.
  */
 export function isNegligibleBossHp(hp, maxHp) {
   if (!Number.isFinite(hp)) return true;
   if (hp <= 0) return true;
   if (!Number.isFinite(maxHp) || maxHp <= 0) return hp < 1;
-  const absCap = Math.max(1, maxHp * 1e-5);
+  // At least 2 absolute HP so integer 1 left after damage still counts as dead (bar is empty).
+  const absCap = Math.max(2, maxHp * 1e-5);
   return hp < absCap || hp / maxHp < 1e-4;
 }
 

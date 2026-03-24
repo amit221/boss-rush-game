@@ -42,6 +42,11 @@ class ShopManager {
     if (typeof s.weapon !== 'string') s.weapon = 'default';
     if (!s.shards || typeof s.shards !== 'object') s.shards = {};
     if (!s.tiers || typeof s.tiers !== 'object') s.tiers = {};
+    // Save could miss tiers[id] while weapon stayed set — treat as unlocked base (tier 0).
+    if (s.weapon !== 'default' && WEAPONS[s.weapon] && typeof s.tiers[s.weapon] !== 'number') {
+      s.tiers[s.weapon] = 0;
+      this._save();
+    }
     return s;
   }
 
@@ -80,12 +85,20 @@ class ShopManager {
 
   getEquippedWeapon(characterId) {
     const s = this._ensure(characterId);
-    const w = s.weapon ?? 'default';
-    if (w !== 'default' && this._tier(s, w) < 0) {
+    let w = s.weapon ?? 'default';
+    if (!WEAPONS[w]) {
       s.weapon = 'default';
       this._save();
+      return 'default';
     }
-    return s.weapon;
+    if (w === 'default') return 'default';
+    const t = s.tiers[w];
+    if (typeof t === 'number' && t < 0) {
+      s.weapon = 'default';
+      this._save();
+      return 'default';
+    }
+    return w;
   }
 
   /** @returns {boolean} */

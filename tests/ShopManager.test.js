@@ -66,6 +66,25 @@ describe('ShopManager', () => {
     expect(shop.getShardCount('brute', roll.weaponId)).toBe(2);
   });
 
+  test('repairs equipped weapon when tier key missing from storage', () => {
+    const mem = {
+      loadHeroShop: () => ({
+        brute: {
+          coins: 10,
+          weapon: 'shotgun',
+          shards: { shotgun: 2 },
+          tiers: {},
+        },
+      }),
+      saveHeroShop: jest.fn(),
+      clearHeroShop: () => {},
+    };
+    const s = new ShopManager(mem);
+    expect(s.getEquippedWeapon('brute')).toBe('shotgun');
+    expect(s.getWeaponTier('brute', 'shotgun')).toBe(0);
+    expect(mem.saveHeroShop).toHaveBeenCalled();
+  });
+
   test('resetAllHeroes clears all state', () => {
     shop.addCoins('brute', 200);
     shop.buyWeaponShard('brute', 'shotgun');

@@ -8,10 +8,15 @@ import { ensureBgm } from '../audio/music.js';
 import { createAudioControls } from '../ui/audioControls.js';
 import { getShardCoinPrice, MYSTERY_BOX_COIN_PRICE } from '../data/weaponEconomy.js';
 
-const ROW_H = 50;
-const SCROLL_H = 400;
 const COL_W = 520;
-const ICON_X = 16;
+const PAGE_SIZE = 5;
+const LIST_TOP = 238;
+const ROW_H = 68;
+const BTN_W = 78;
+const BTN_H = 22;
+const BTN_GAP = 6;
+const ICON_X_OFF = 16;
+const DEPTH_UI = 20;
 
 function weaponStatLine(w) {
   return T.weaponStatLine(
@@ -34,91 +39,108 @@ export default class ShopScene extends Phaser.Scene {
     this._sm = this.registry.get('shopManager');
     this._playerCount = this.registry.get('playerCount') ?? 1;
     this._confirmed = { 1: false, 2: this._playerCount === 1 };
-    this._weaponScroll = { 1: 0, 2: 0 };
-    this._scrollMax = { 1: 0, 2: 0 };
-    this._scrollContainers = {};
-    this._maskTops = {};
+    this._weaponPage = { 1: 0, 2: 0 };
+    this._listObjects = { 1: [], 2: [] };
     this._buildUI();
     this._setupInput();
-    this._setupScrollWheel();
     ensureBgm(this, 'music_menu');
     createAudioControls(this);
   }
 
-  _setupScrollWheel() {
-    this.input.on('wheel', (pointer, _go, _dx, deltaY) => {
-      const pid = this._playerCount === 2 && pointer.x >= 640 ? 2 : 1;
-      const max = this._scrollMax[pid] ?? 0;
-      if (max <= 0) return;
-      const next = Phaser.Math.Clamp(
-        (this._weaponScroll[pid] ?? 0) + deltaY * 0.35,
-        0,
-        max,
-      );
-      this._weaponScroll[pid] = next;
-      const cont = this._scrollContainers[pid];
-      const top = this._maskTops[pid];
-      if (cont && top != null) cont.y = top - next;
+  _track(pid, ...objs) {
+    objs.forEach((o) => {
+      if (o) this._listObjects[pid].push(o);
     });
+  }
+
+  _clearList(pid) {
+    (this._listObjects[pid] ?? []).forEach((o) => o.destroy());
+    this._listObjects[pid] = [];
+  }
+
+  _refreshList(pid, charId, ox, left) {
+    this._clearList(pid);
+    this._drawPagedWeapons(pid, charId, ox, left);
+  }
+
+  _addRectBtn(pid, cx, cy, w, h, label, enabled, onClick) {
+    const fill = enabled ? 0x2a1a0e : 0x140c08;
+    const stroke = enabled ? COLORS.strokeBright : 0x3a3530;
+    const r = this.add.rectangle(cx, cy, w, h, fill, 0.96)
+      .setStrokeStyle(2, stroke)
+      .setScrollFactor(0)
+      .setDepth(DEPTH_UI);
+    const t = this.add.text(cx, cy, label, {
+      fontFamily: FONT_FAMILY,
+      fontSize: '9px',
+      color: enabled ? '#ffeecc' : '#555555',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH_UI + 1);
+    this._track(pid, r, t);
+    if (enabled) {
+      r.setInteractive({ useHandCursor: true });
+      r.on('pointerover', () => r.setFillStyle(0x3d2812));
+      r.on('pointerout', () => r.setFillStyle(0x2a1a0e));
+      r.on('pointerdown', () => {
+        onClick();
+      });
+    }
   }
 
   _buildUI() {
     const sm = this._sm;
     const chars = this.registry.get('selectedCharacters') ?? { 1: 'brute', 2: 'scout' };
     addMenuBackdrop(this);
-    this.add.rectangle(640, 360, 1240, 680, 0x000000, 0.22).setDepth(-9);
-    this.add.text(640, 30, T.shopTitle, {
+    this.add.rectangle(640, 360, 1240, 680, 0x000000, 0.22).setDepth(-9).setScrollFactor(0);
+    this.add.text(640, 28, T.shopTitle, {
       fontFamily: FONT_FAMILY,
       fontSize: '28px',
       color: '#ffdd88',
       stroke: '#4a3510', strokeThickness: 5,
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH_UI);
 
     const pids = this._playerCount === 1 ? [1] : [1, 2];
     pids.forEach((pid) => {
       const charId = chars[pid];
       if (!charId) return;
       const ox = this._playerCount === 1 ? 640 : (pid === 1 ? 320 : 960);
-      const color = pid === 1 ? '#4488ff' : '#ff8844';
+      const color = pid === 1 ? '#6699ff' : '#ff9966';
       const left = ox - COL_W / 2;
+      const right = ox + COL_W / 2;
 
       const charName = CHARACTERS[charId]?.name ?? charId;
-      this.add.text(ox, 72, T.shopPlayer(pid, charName), {
+      this.add.text(ox, 64, T.shopPlayer(pid, charName), {
         fontFamily: FONT_FAMILY, fontSize: '14px', color,
-      }).setOrigin(0.5);
-      this.add.text(ox, 94, T.coins(sm.getCoins(charId)), {
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH_UI);
+
+      this.add.text(ox, 86, T.coins(sm.getCoins(charId)), {
         fontFamily: FONT_FAMILY, fontSize: '12px', color: '#ffdd00',
-      }).setOrigin(0.5);
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH_UI);
 
-      this.add.line(ox, 112, 0, 0, 240, 0, COLORS.strokeDim);
+      const curId = sm.getEquippedWeapon(charId);
+      const curName = WEAPONS[curId]?.name ?? curId;
+      this.add.rectangle(ox, 108, COL_W - 24, 30, 0x0f0804, 0.9)
+        .setStrokeStyle(2, COLORS.strokeBright, 0.55)
+        .setScrollFactor(0).setDepth(DEPTH_UI - 1);
+      this.add.text(ox, 108, T.shopActiveWeapon(curName), {
+        fontFamily: FONT_FAMILY,
+        fontSize: '12px',
+        color: curId === 'default' ? '#c8b898' : '#88ffaa',
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH_UI);
 
-      this._addDefaultWeaponRow(ox, left, charId, 118);
-      const mysteryY = 168;
-      this._addMysteryRow(ox, left, charId, mysteryY);
+      this.add.text(ox, 138, T.shopHintActions, {
+        fontFamily: FONT_FAMILY,
+        fontSize: '7px',
+        color: '#666666',
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH_UI);
 
-      const maskTop = mysteryY + 36;
-      this._maskTops[pid] = maskTop;
-      const maskG = this.add.graphics().setScrollFactor(0).setVisible(false);
-      maskG.fillStyle(0xffffff, 1);
-      maskG.fillRect(left, maskTop, COL_W, SCROLL_H);
-      const geomMask = maskG.createGeometryMask();
+      this._addDefaultRow(pid, charId, ox, left, right);
+      this._addMysteryRow(charId, ox);
 
-      const cont = this.add.container(left, maskTop).setDepth(5);
-      cont.setMask(geomMask);
-      this._scrollContainers[pid] = cont;
-
-      let y = 8;
-      sortedShopWeaponIds().forEach((wid) => {
-        y += this._addWeaponBlock(cont, ox - left, y, charId, wid);
-      });
-
-      const innerH = y + 8;
-      this._scrollMax[pid] = Math.max(0, innerH - SCROLL_H);
-      cont.y = maskTop - (this._weaponScroll[pid] ?? 0);
+      this._drawPagedWeapons(pid, charId, ox, left);
     });
 
     if (this._playerCount === 2) {
-      this.add.line(640, 360, 0, -360, 0, 360, 0x3a4860).setLineWidth(2);
+      this.add.line(640, 360, 0, -360, 0, 360, 0x3a4860).setLineWidth(2).setScrollFactor(0);
     }
 
     pids.forEach((pid) => {
@@ -127,66 +149,122 @@ export default class ShopScene extends Phaser.Scene {
       const doneKey = pid === 1 ? 'ENTER' : 'SHIFT';
       this.add.text(ox, 668, T.shopDone(doneKey), {
         fontFamily: FONT_FAMILY, fontSize: '12px', color: doneColor,
-      }).setOrigin(0.5);
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH_UI);
     });
 
     this.add.text(640, 698, T.shopEscHint, {
       fontFamily: FONT_FAMILY,
       fontSize: '8px', color: '#666666',
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH_UI);
   }
 
-  _addDefaultWeaponRow(ox, left, charId, yTop) {
+  _addDefaultRow(pid, charId, ox, left, right) {
     const sm = this._sm;
+    const y = 146;
     const w = WEAPONS.default;
     const equipped = sm.getEquippedWeapon(charId) === 'default';
-    const nameCol = equipped ? '#44ff44' : '#ffffff';
-    this.add.image(left + ICON_X, yTop + 10, 'icon_weapon_default').setOrigin(0, 0);
-    this.add.text(left + 48, yTop + 4, w.name, {
-      fontFamily: FONT_FAMILY, fontSize: '13px', color: nameCol,
-    }).setOrigin(0, 0);
-    this.add.text(left + 48, yTop + 22, weaponStatLine(w), {
-      fontFamily: FONT_FAMILY, fontSize: '8px', color: '#888888',
-    }).setOrigin(0, 0);
-    const eq = this.add.text(left + COL_W - 72, yTop + 14, T.shopEquip, {
-      fontFamily: FONT_FAMILY, fontSize: '10px', color: equipped ? '#555555' : '#ffdd88',
-    }).setOrigin(0, 0);
-    if (!equipped) {
-      eq.setInteractive({ useHandCursor: true });
-      eq.on('pointerdown', () => {
+
+    this.add.rectangle(ox, y + 22, COL_W - 16, 44, 0x120a06, 0.88)
+      .setStrokeStyle(1, 0x4a3518, 0.7)
+      .setScrollFactor(0).setDepth(DEPTH_UI - 1);
+
+    this.add.image(left + ICON_X_OFF, y + 6, 'icon_weapon_default')
+      .setOrigin(0, 0).setScrollFactor(0).setDepth(DEPTH_UI);
+
+    const nameCol = equipped ? '#77ff99' : '#eeeeee';
+    this.add.text(left + 50, y + 4, w.name, {
+      fontFamily: FONT_FAMILY, fontSize: '12px', color: nameCol,
+    }).setOrigin(0, 0).setScrollFactor(0).setDepth(DEPTH_UI);
+
+    this.add.text(left + 50, y + 20, weaponStatLine(w), {
+      fontFamily: FONT_FAMILY, fontSize: '7px', color: '#777777',
+    }).setOrigin(0, 0).setScrollFactor(0).setDepth(DEPTH_UI);
+
+    const btnRight = right - 12 - BTN_W / 2;
+    this._addRectBtn(
+      pid,
+      btnRight,
+      y + 22,
+      BTN_W,
+      BTN_H,
+      T.shopEquip,
+      !equipped,
+      () => {
         if (sm.setEquippedWeapon(charId, 'default')) {
           playUiConfirm(this);
           this.scene.restart();
         }
-      });
-      eq.on('pointerover', () => eq.setColor('#ffff88'));
-      eq.on('pointerout', () => eq.setColor('#ffdd88'));
-    }
+      },
+    );
   }
 
-  _addMysteryRow(ox, left, charId, yTop) {
+  _addMysteryRow(charId, ox) {
     const sm = this._sm;
+    const y = 198;
     const can = sm.getCoins(charId) >= MYSTERY_BOX_COIN_PRICE;
-    const col = can ? '#ddaaff' : '#555555';
-    const t = this.add.text(left + 48, yTop + 8, T.shopMystery(MYSTERY_BOX_COIN_PRICE), {
-      fontFamily: FONT_FAMILY, fontSize: '12px', color: col,
-    }).setOrigin(0, 0);
+
+    this.add.rectangle(ox, y + 14, COL_W - 16, 32, 0x180818, 0.9)
+      .setStrokeStyle(1, can ? 0x8866aa : 0x333333)
+      .setScrollFactor(0).setDepth(DEPTH_UI - 1);
+
+    const cx = ox;
+    const cy = y + 14;
+    const r = this.add.rectangle(cx, cy, COL_W - 20, 28, can ? 0x2a1530 : 0x120812, 0.95)
+      .setStrokeStyle(2, can ? 0xaa77cc : 0x444444)
+      .setScrollFactor(0).setDepth(DEPTH_UI);
+    const t = this.add.text(cx, cy, T.shopMystery(MYSTERY_BOX_COIN_PRICE), {
+      fontFamily: FONT_FAMILY,
+      fontSize: '11px',
+      color: can ? '#eeccff' : '#555555',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH_UI + 1);
     if (can) {
-      t.setInteractive({ useHandCursor: true });
-      t.on('pointerdown', () => {
-        const roll = sm.buyMysteryBox(charId);
-        if (roll) {
+      r.setInteractive({ useHandCursor: true });
+      r.on('pointerover', () => r.setFillStyle(0x3a2048));
+      r.on('pointerout', () => r.setFillStyle(0x2a1530));
+      r.on('pointerdown', () => {
+        if (sm.buyMysteryBox(charId)) {
           playUiBuy(this);
           this.scene.restart();
         }
       });
-      t.on('pointerover', () => t.setColor('#ffccff'));
-      t.on('pointerout', () => t.setColor('#ddaaff'));
     }
   }
 
-  /** @returns {number} height used */
-  _addWeaponBlock(cont, _colW, y0, charId, weaponId) {
+  _drawPagedWeapons(pid, charId, ox, left) {
+    const sm = this._sm;
+    const right = ox + COL_W / 2;
+    const ids = sortedShopWeaponIds();
+    const nPages = Math.max(1, Math.ceil(ids.length / PAGE_SIZE));
+    this._weaponPage[pid] = Phaser.Math.Clamp(this._weaponPage[pid] ?? 0, 0, nPages - 1);
+    const page = this._weaponPage[pid];
+    const slice = ids.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+
+    slice.forEach((weaponId, i) => {
+      const rowTop = LIST_TOP + i * ROW_H;
+      this._drawWeaponRow(pid, charId, ox, left, right, rowTop, weaponId);
+    });
+
+    const navY = LIST_TOP + PAGE_SIZE * ROW_H + 12;
+    const pageLabel = this.add.text(ox, navY, T.shopPage(page + 1, nPages), {
+      fontFamily: FONT_FAMILY,
+      fontSize: '10px',
+      color: '#999999',
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH_UI);
+    this._track(pid, pageLabel);
+
+    if (nPages > 1) {
+      this._addRectBtn(pid, ox - 72, navY, 64, 22, T.shopPrev, page > 0, () => {
+        this._weaponPage[pid] = page - 1;
+        this._refreshList(pid, charId, ox, left);
+      });
+      this._addRectBtn(pid, ox + 72, navY, 64, 22, T.shopNext, page < nPages - 1, () => {
+        this._weaponPage[pid] = page + 1;
+        this._refreshList(pid, charId, ox, left);
+      });
+    }
+  }
+
+  _drawWeaponRow(pid, charId, ox, left, right, rowTop, weaponId) {
     const sm = this._sm;
     const w = WEAPONS[weaponId];
     const tier = sm.getWeaponTier(charId, weaponId);
@@ -195,87 +273,92 @@ export default class ShopScene extends Phaser.Scene {
     const equipped = sm.getEquippedWeapon(charId) === weaponId;
     const price = getShardCoinPrice(weaponId);
     const canBuyShard = sm.getCoins(charId) >= price;
-    const canAdvance = tier >= 0 ? shards >= need : shards >= need;
+    const canAdvance = shards >= need;
 
-    const iconKey = `icon_weapon_${weaponId}`;
-    const img = this.add.image(ICON_X, y0 + 6, iconKey).setOrigin(0, 0);
-    cont.add(img);
+    const cy = rowTop + ROW_H / 2 - 2;
+    const bg = this.add.rectangle(ox, cy, COL_W - 16, ROW_H - 4, equipped ? 0x0e1a0e : 0x0c0a08, 0.92)
+      .setStrokeStyle(2, equipped ? 0x44aa44 : 0x3a3020, equipped ? 0.9 : 0.5)
+      .setScrollFactor(0).setDepth(DEPTH_UI - 1);
+    this._track(pid, bg);
 
-    const nameCol = equipped ? '#44ff44' : '#ffffff';
-    const tName = this.add.text(48, y0 + 2, w.name, {
-      fontFamily: FONT_FAMILY, fontSize: '12px', color: nameCol,
-    }).setOrigin(0, 0);
-    cont.add(tName);
+    const img = this.add.image(left + ICON_X_OFF, rowTop + 8, `icon_weapon_${weaponId}`)
+      .setOrigin(0, 0).setScrollFactor(0).setDepth(DEPTH_UI);
+    this._track(pid, img);
 
-    const tStat = this.add.text(48, y0 + 18, weaponStatLine(w), {
+    const nameCol = equipped ? '#66ff88' : '#ffffff';
+    const tName = this.add.text(left + 48, rowTop + 6, w.name, {
+      fontFamily: FONT_FAMILY, fontSize: '11px', color: nameCol,
+    }).setOrigin(0, 0).setScrollFactor(0).setDepth(DEPTH_UI);
+    this._track(pid, tName);
+
+    const tStat = this.add.text(left + 48, rowTop + 22, weaponStatLine(w), {
       fontFamily: FONT_FAMILY, fontSize: '7px', color: '#777777',
-    }).setOrigin(0, 0);
-    cont.add(tStat);
+    }).setOrigin(0, 0).setScrollFactor(0).setDepth(DEPTH_UI);
+    this._track(pid, tStat);
 
     const tierLabel = tier < 0 ? T.shopLocked : T.shopTier(tier);
-    const tMeta = this.add.text(48, y0 + 28, `${T.shopShards(shards)}  ·  ${tierLabel}`, {
-      fontFamily: FONT_FAMILY, fontSize: '8px', color: '#999999',
-    }).setOrigin(0, 0);
-    cont.add(tMeta);
+    const tMeta = this.add.text(left + 48, rowTop + 34, `${T.shopShards(shards)}  ·  ${tierLabel}`, {
+      fontFamily: FONT_FAMILY,
+      fontSize: '8px',
+      color: '#999999',
+    }).setOrigin(0, 0).setScrollFactor(0).setDepth(DEPTH_UI);
+    this._track(pid, tMeta);
 
-    let bx = 48;
-    const by = y0 + 38;
-    const buyShardTxt = this.add.text(bx, by, T.shopBuyShard(price), {
-      fontFamily: FONT_FAMILY, fontSize: '9px', color: canBuyShard ? '#ffdd88' : '#555555',
-    }).setOrigin(0, 0);
-    cont.add(buyShardTxt);
-    if (canBuyShard) {
-      buyShardTxt.setInteractive({ useHandCursor: true });
-      buyShardTxt.on('pointerdown', () => {
-        if (sm.buyWeaponShard(charId, weaponId)) {
-          playUiBuy(this);
-          this.scene.restart();
-        }
-      });
-      buyShardTxt.on('pointerover', () => buyShardTxt.setColor('#ffffaa'));
-      buyShardTxt.on('pointerout', () => buyShardTxt.setColor('#ffdd88'));
-    }
-    bx += 100;
-
-    const advLabel = tier < 0 ? T.shopUnlockCost(need) : T.shopUpgradeCost(need);
-    const canAdvColor = canAdvance ? '#88ffaa' : '#555555';
-    const advTxt = this.add.text(bx, by, advLabel, {
-      fontFamily: FONT_FAMILY, fontSize: '9px', color: canAdvColor,
-    }).setOrigin(0, 0);
-    cont.add(advTxt);
-    if (canAdvance) {
-      advTxt.setInteractive({ useHandCursor: true });
-      advTxt.on('pointerdown', () => {
-        if (sm.advanceWeaponWithShards(charId, weaponId)) {
-          playUiBuy(this);
-          this.scene.restart();
-        }
-      });
-      advTxt.on('pointerover', () => advTxt.setColor('#ccffcc'));
-      advTxt.on('pointerout', () => advTxt.setColor('#88ffaa'));
-    }
-    bx += 118;
+    let xBtn = right - 12 - BTN_W / 2;
+    const btnY = rowTop + ROW_H - 18;
 
     if (tier >= 0) {
-      const eqCol = equipped ? '#555555' : '#aaccff';
-      const eqTxt = this.add.text(bx, by, T.shopEquip, {
-        fontFamily: FONT_FAMILY, fontSize: '9px', color: eqCol,
-      }).setOrigin(0, 0);
-      cont.add(eqTxt);
-      if (!equipped) {
-        eqTxt.setInteractive({ useHandCursor: true });
-        eqTxt.on('pointerdown', () => {
+      this._addRectBtn(
+        pid,
+        xBtn,
+        btnY,
+        BTN_W,
+        BTN_H,
+        T.shopEquip,
+        !equipped,
+        () => {
           if (sm.setEquippedWeapon(charId, weaponId)) {
             playUiConfirm(this);
             this.scene.restart();
           }
-        });
-        eqTxt.on('pointerover', () => eqTxt.setColor('#ffffff'));
-        eqTxt.on('pointerout', () => eqTxt.setColor('#aaccff'));
-      }
+        },
+      );
+      xBtn -= BTN_W + BTN_GAP;
     }
 
-    return ROW_H + 18;
+    const advLabel = tier < 0 ? T.shopUnlockCost(need) : T.shopUpgradeCost(need);
+    this._addRectBtn(
+      pid,
+      xBtn,
+      btnY,
+      BTN_W + 10,
+      BTN_H,
+      advLabel,
+      canAdvance,
+      () => {
+        if (sm.advanceWeaponWithShards(charId, weaponId)) {
+          playUiBuy(this);
+          this.scene.restart();
+        }
+      },
+    );
+    xBtn -= BTN_W + 10 + BTN_GAP;
+
+    this._addRectBtn(
+      pid,
+      xBtn,
+      btnY,
+      BTN_W + 6,
+      BTN_H,
+      T.shopBuyShard(price),
+      canBuyShard,
+      () => {
+        if (sm.buyWeaponShard(charId, weaponId)) {
+          playUiBuy(this);
+          this.scene.restart();
+        }
+      },
+    );
   }
 
   _setupInput() {

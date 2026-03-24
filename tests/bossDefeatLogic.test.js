@@ -15,6 +15,9 @@ describe('isNegligibleBossHp', () => {
     expect(isNegligibleBossHp(0.015, 1500)).toBe(true);
     expect(isNegligibleBossHp(0.5, 1500)).toBe(true);
     expect(isNegligibleBossHp(0.99, 1500)).toBe(true);
+    // Integer 1 HP on high-HP bosses must not soft-lock defeat
+    expect(isNegligibleBossHp(1, 1500)).toBe(true);
+    expect(isNegligibleBossHp(1, 4000)).toBe(true);
   });
 
   test('false for meaningful HP', () => {
@@ -34,6 +37,7 @@ describe('shouldBossBeDefeated', () => {
   test('true when hp negligible and not yet defeated', () => {
     expect(shouldBossBeDefeated(0, false, 1500)).toBe(true);
     expect(shouldBossBeDefeated(0.01, false, 1500)).toBe(true);
+    expect(shouldBossBeDefeated(1, false, 3000)).toBe(true);
   });
 
   test('false when already defeated', () => {

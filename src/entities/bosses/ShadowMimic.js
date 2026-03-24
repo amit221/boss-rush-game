@@ -1,6 +1,6 @@
 import BaseBoss from './BaseBoss.js';
 import { WEAPONS } from '../../data/weapons.js';
-import { normalizeBossHp, isNegligibleBossHp } from './bossDefeatLogic.js';
+import { normalizeBossHp, shouldBossBeDefeated } from './bossDefeatLogic.js';
 
 export default class ShadowMimic extends BaseBoss {
   constructor(scene, x, y) {
@@ -47,7 +47,7 @@ export default class ShadowMimic extends BaseBoss {
         const raw = Number(dmg);
         const d = Number.isFinite(raw) && raw >= 0 ? raw : 0;
         clone.hp = normalizeBossHp(Math.max(0, clone.hp - d), clone.maxHp);
-        if (isNegligibleBossHp(clone.hp, clone.maxHp)) {
+        if (shouldBossBeDefeated(clone.hp, false, clone.maxHp)) {
           clone.destroy();
           this._clones = this._clones.filter(c => c !== clone);
           this._updateCloneHpBar();

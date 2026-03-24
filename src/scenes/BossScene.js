@@ -4,7 +4,7 @@ import { getArenaFloorStyle, drawArenaFloorPattern } from '../data/arenaFloorSty
 import { WEAPONS } from '../data/weapons.js';
 import { MINION_COIN_VALUE, MINION_COIN_DESPAWN_MS, minionShouldDropCoins } from '../data/minionLoot.js';
 import { recordBossDefeated } from '../persistence/bossUnlocks.js';
-import { shouldBossBeDefeated } from '../entities/bosses/bossDefeatLogic.js';
+import { shouldBossBeDefeated, normalizeBossHp } from '../entities/bosses/bossDefeatLogic.js';
 import { FONT_FAMILY, COLORS } from '../ui/theme.js';
 import { T } from '../i18n/hebrew.js';
 import { ensureBgm } from '../audio/music.js';
@@ -284,7 +284,8 @@ export default class BossScene extends Phaser.Scene {
         fontSize: '8px', color: '#555566',
       }).setScrollFactor(0).setDepth(150);
     }
-    this._bindHudToSplitCameras();
+    this._bindSplitScreenUiToCameras();
+    this._setupBossHpOverlayCamera();
     this.input.keyboard.once('keydown-ESC', () => {
       this.scene.start('CharacterSelectScene');
     });
@@ -320,8 +321,13 @@ export default class BossScene extends Phaser.Scene {
     rect.maxHp = 300;
     rect.phase = 1;
     rect.takeDamage = (dmg) => {
-      rect.hp = Math.max(0, rect.hp - dmg);
-      if (rect.hp <= 0) this._onBossDefeated();
+      if (this._bossDefeated) return;
+      const raw = Number(dmg);
+      const d = Number.isFinite(raw) && raw >= 0 ? raw : 0;
+      rect.hp = normalizeBossHp(Math.max(0, rect.hp - d), rect.maxHp);
+      if (shouldBossBeDefeated(rect.hp, !!this._bossDefeated, rect.maxHp)) {
+        this._onBossDefeated();
+      }
     };
     this.boss = rect;
 
@@ -358,41 +364,68 @@ export default class BossScene extends Phaser.Scene {
     const barW = 200;
     const barH = 12;
     const y = 700;
+    if (this._playerCount === 1) {
+      const cx = 120;
+      this.add.rectangle(cx, y, barW + 10, 28, 0x0f0800, 0.92).setStrokeStyle(2, COLORS.strokeDim).setScrollFactor(0).setDepth(98);
+      this.add.text(cx - barW / 2, y - 28, T.hudPlayer(1), {
+        fontFamily: FONT_FAMILY,
+        fontSize: '10px',
+        color: '#88ccff',
+      }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(100);
+      this._p1HpBar = this.add.rectangle(20, y, barW, barH, 0x44ff22).setScrollFactor(0).setDepth(100).setOrigin(0, 0.5);
+      return;
+    }
+    // 2P: P1 HUD only in left pane, P2 only in right — _bindSplitScreenUiToCameras ties each to one camera
     this._p1HudObjs = [];
     this._p2HudObjs = [];
-    const track = (cx, pid, bucket) => {
+    const addRow = (cx, pid, bucket) => {
       const pad = this.add.rectangle(cx, y, barW + 10, 28, 0x0f0800, 0.92).setStrokeStyle(2, COLORS.strokeDim).setScrollFactor(0).setDepth(98);
       const label = this.add.text(cx - barW / 2, y - 28, T.hudPlayer(pid), {
         fontFamily: FONT_FAMILY,
         fontSize: '10px',
         color: pid === 1 ? '#88ccff' : '#ffaa77',
       }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(100);
-      bucket.push(pad, label);
+      const bar = this.add.rectangle(cx - barW / 2, y, barW, barH, 0x44ff22)
+        .setScrollFactor(0).setDepth(100).setOrigin(0, 0.5);
+      bucket.push(pad, label, bar);
+      return bar;
     };
-    track(120, 1, this._p1HudObjs);
-    this._p1HpBar = this.add.rectangle(20, y, barW, barH, 0x44ff22).setScrollFactor(0).setDepth(100).setOrigin(0, 0.5);
-    this._p1HudObjs.push(this._p1HpBar);
-    if (this._playerCount === 2) {
-      // Right pane center ≈ 960 so P2 HUD stays inside the 640–1280 strip (was too close to the seam)
-      const cx2 = 960;
-      track(cx2, 2, this._p2HudObjs);
-      this._p2HpBar = this.add.rectangle(cx2 - barW / 2, y, barW, barH, 0x44ff22).setScrollFactor(0).setDepth(100).setOrigin(0, 0.5);
-      this._p2HudObjs.push(this._p2HpBar);
-    }
+    this._p1HpBar = addRow(320, 1, this._p1HudObjs);
+    this._p2HpBar = addRow(960, 2, this._p2HudObjs);
   }
 
-  /** Each split viewport only draws its own HUD + boss HP strip (fixed UI uses full-canvas x). */
-  _bindHudToSplitCameras() {
+  /** Each split viewport only draws that player’s HUD + ESC hint on their side. */
+  _bindSplitScreenUiToCameras() {
     if (this._playerCount !== 2 || !this.cam2) return;
     this._p1HudObjs.forEach((o) => this.cam2.ignore(o));
     this._p2HudObjs.forEach((o) => this.cameras.main.ignore(o));
-    const boss = this.boss;
-    if (boss && boss._splitHpBar && boss._hpBarBg?.length === 2) {
-      this.cam2.ignore([boss._hpBarBg[0], boss._hpBarFill[0]]);
-      this.cameras.main.ignore([boss._hpBarBg[1], boss._hpBarFill[1]]);
-    }
     if (this._escHintP1) this.cam2.ignore(this._escHintP1);
     if (this._escHintP2) this.cameras.main.ignore(this._escHintP2);
+  }
+
+  /**
+   * Single boss HP bar centered on the full 1280× canvas; split cameras clip it in half.
+   * A transparent full-frame camera redraws only the boss bar on top so both players see the full bar.
+   */
+  _setupBossHpOverlayCamera() {
+    if (this._playerCount !== 2 || !this.cam2) return;
+    const boss = this.boss;
+    if (!boss || !boss._hpBarBg || !boss._hpBarFill) return;
+    const layers = [boss._hpBarBg, boss._hpBarFill];
+    this.cameras.main.ignore(layers);
+    this.cam2.ignore(layers);
+    const uiCam = this.cameras.add(0, 0, 1280, 720);
+    uiCam.transparent = true;
+    uiCam.setScroll(0, 0);
+    this._bossUiCam = uiCam;
+    const ignoreUnlessBoss = (child) => {
+      if (!child || layers.includes(child)) return;
+      uiCam.ignore(child);
+    };
+    this.children.each(ignoreUnlessBoss);
+    if (this.children.events) {
+      this.children.events.on('add', ignoreUnlessBoss);
+    }
   }
 
   _hpBarColor(ratio) {
@@ -426,13 +459,18 @@ export default class BossScene extends Phaser.Scene {
 
   _updateHUD() {
     const r1 = Math.max(0, this.player1.hp / this.player1.maxHp);
-    this._p1HpBar.scaleX = r1;
-    this._p1HpBar.setFillStyle(this._hpBarColor(r1));
-    if (this._playerCount === 2) {
-      const r2 = Math.max(0, this.player2.hp / this.player2.maxHp);
-      this._p2HpBar.scaleX = r2;
-      this._p2HpBar.setFillStyle(this._hpBarColor(r2));
+    const paint = (bar, r) => {
+      if (!bar) return;
+      bar.scaleX = r;
+      bar.setFillStyle(this._hpBarColor(r));
+    };
+    if (this._playerCount === 1) {
+      paint(this._p1HpBar, r1);
+      return;
     }
+    const r2 = Math.max(0, this.player2.hp / this.player2.maxHp);
+    paint(this._p1HpBar, r1);
+    paint(this._p2HpBar, r2);
   }
 
   _onPlayerFire(player, target) {

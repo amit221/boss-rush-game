@@ -35,53 +35,25 @@ export default class BaseBoss extends Phaser.Physics.Arcade.Sprite {
   }
 
   _createHpBar(scene) {
-    const split = (scene.registry.get('playerCount') ?? 1) === 2;
+    const barWidth = 600;
     const barH = 20;
     const barY = 20;
+    const barX = (1280 - barWidth) / 2;
 
-    if (split) {
-      // One bar per split viewport (640px); full-width bar would straddle x=640 and look cut in half
-      const barWidth = 520;
-      const centersX = [320, 960];
-      this._splitHpBar = true;
-      this._hpBarBg = [];
-      this._hpBarFill = [];
-      centersX.forEach((cx) => {
-        const barX = cx - barWidth / 2;
-        this._hpBarBg.push(
-          scene.add.rectangle(cx, barY, barWidth, barH, 0x333333)
-            .setScrollFactor(0).setDepth(100)
-        );
-        const fill = scene.add.rectangle(barX, barY, barWidth, barH, 0xff4400)
-          .setScrollFactor(0).setDepth(101)
-          .setOrigin(0, 0.5);
-        this._hpBarFill.push(fill);
-      });
-      this._barWidth = barWidth;
-    } else {
-      this._splitHpBar = false;
-      const barWidth = 600;
-      const barX = (1280 - barWidth) / 2;
+    this._hpBarBg = scene.add.rectangle(
+      barX + barWidth / 2, barY, barWidth, barH, 0x333333
+    ).setScrollFactor(0).setDepth(100);
 
-      this._hpBarBg = scene.add.rectangle(
-        barX + barWidth / 2, barY, barWidth, barH, 0x333333
-      ).setScrollFactor(0).setDepth(100);
+    this._hpBarFill = scene.add.rectangle(
+      barX, barY, barWidth, barH, 0xff4400
+    ).setScrollFactor(0).setDepth(101);
+    this._hpBarFill.setOrigin(0, 0.5);
 
-      this._hpBarFill = scene.add.rectangle(
-        barX, barY, barWidth, barH, 0xff4400
-      ).setScrollFactor(0).setDepth(101);
-      this._hpBarFill.setOrigin(0, 0.5);
-
-      this._barWidth = barWidth;
-    }
+    this._barWidth = barWidth;
   }
 
   _applyHpBarScale(ratio) {
-    if (this._splitHpBar) {
-      this._hpBarFill.forEach((f) => { f.scaleX = ratio; });
-    } else if (this._hpBarFill) {
-      this._hpBarFill.scaleX = ratio;
-    }
+    if (this._hpBarFill) this._hpBarFill.scaleX = ratio;
   }
 
   _updateHpBar() {
@@ -146,13 +118,8 @@ export default class BaseBoss extends Phaser.Physics.Arcade.Sprite {
   }
 
   destroy() {
-    if (this._splitHpBar) {
-      this._hpBarBg.forEach((g) => g.destroy());
-      this._hpBarFill.forEach((f) => f.destroy());
-    } else {
-      this._hpBarBg?.destroy();
-      this._hpBarFill?.destroy();
-    }
+    this._hpBarBg?.destroy();
+    this._hpBarFill?.destroy();
     this._auraGfx?.destroy();
     super.destroy();
   }
