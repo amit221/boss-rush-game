@@ -1,10 +1,15 @@
 import Player from '../entities/Player.js';
 import { BOSS_CLASSES, BOSS_ORDER, BOSS_LABELS } from '../data/bosses.js';
+import { getArenaFloorStyle, drawArenaFloorPattern } from '../data/arenaFloorStyles.js';
 import { WEAPONS } from '../data/weapons.js';
+import { MINION_COIN_VALUE, MINION_COIN_DESPAWN_MS, minionShouldDropCoins } from '../data/minionLoot.js';
 import { recordBossDefeated } from '../persistence/bossUnlocks.js';
+import { shouldBossBeDefeated } from '../entities/bosses/bossDefeatLogic.js';
 import { FONT_FAMILY, COLORS } from '../ui/theme.js';
+import { T } from '../i18n/hebrew.js';
 import { ensureBgm } from '../audio/music.js';
 import { createAudioControls } from '../ui/audioControls.js';
+import { playUiConfirm } from '../audio/sfx.js';
 import {
   hitBurst,
   hitDispatch,
@@ -27,15 +32,52 @@ function dist(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-function findTarget(player, boss, minions) {
-  const MINION_PRIORITY_RANGE = 150;
-  const near = minions.filter(m => m.active && dist(player, m) <= MINION_PRIORITY_RANGE);
-  if (near.length === 0) return boss;
-  return near.reduce((closest, m) => dist(player, m) < dist(player, closest) ? m : closest);
+function isBossEngageable(boss) {
+  if (!boss) return false;
+  if (boss.active === false) return false;
+  if (boss.body && boss.body.enable === false) return false;
+  return true;
 }
 
-function calculateDamage(baseDamage, weaponMultiplier, upgradeCount) {
-  return baseDamage * weaponMultiplier * Math.pow(1.15, upgradeCount);
+function findTarget(player, boss, minions) {
+  const MINION_PRIORITY_RANGE = 150;
+  const activeMinions = minions.filter(m => m.active);
+  const near = activeMinions.filter(m => dist(player, m) <= MINION_PRIORITY_RANGE);
+  if (near.length > 0) {
+    return near.reduce((closest, m) => dist(player, m) < dist(player, closest) ? m : closest);
+  }
+  if (isBossEngageable(boss)) return boss;
+  // e.g. Shadow Mimic split: boss hidden/inactive — focus nearest minion or clone
+  if (activeMinions.length === 0) return null;
+  return activeMinions.reduce((closest, m) => dist(player, m) < dist(player, closest) ? m : closest);
+}
+
+function calculateDamage(baseDamage, weaponMultiplier, weaponTier) {
+  const t = Number.isFinite(weaponTier) && weaponTier > 0 ? Math.floor(weaponTier) : 0;
+  return baseDamage * weaponMultiplier * Math.pow(1.09, t);
+}
+
+function schedulePoisonDamage(scene, target, hitDamage, poison) {
+  if (!poison || hitDamage <= 0) return;
+  const tickDmg = Math.max(1, Math.floor(hitDamage * poison.tickRatio));
+  const { ticks, intervalMs } = poison;
+  for (let i = 1; i <= ticks; i++) {
+    scene.time.delayedCall(intervalMs * i, () => {
+      if (!target || !target.active) return;
+      if (typeof target.takeDamage === 'function') {
+        target.takeDamage(tickDmg);
+      } else if (target.hp !== undefined) {
+        target.hp -= tickDmg;
+        if (target.hp <= 0) {
+          if (scene.minions && scene.minions.contains(target)) {
+            scene._finishMinionCombatDeath(target);
+          } else {
+            target.destroy();
+          }
+        }
+      }
+    });
+  }
 }
 
 export default class BossScene extends Phaser.Scene {
@@ -48,22 +90,30 @@ export default class BossScene extends Phaser.Scene {
     this._playerCount = reg.get('playerCount') ?? 1;
     const chars = reg.get('selectedCharacters') ?? { 1: 'brute', 2: 'scout' };
 
-    // Arena — black void; Kenney Tiny Dungeon floor tile (CC0), tiled
+    // Arena — per-boss palette + pattern; Kenney Tiny Dungeon floor tile (CC0), tiled
     this.physics.world.setBounds(0, 0, 1600, 1200);
-    this.add.rectangle(800, 600, 1600, 1200, 0x000000).setOrigin(0.5).setDepth(-3);
+    const arenaBossName = BOSS_ORDER[this.bossIndex] ?? BOSS_ORDER[0];
+    const floorStyle = getArenaFloorStyle(arenaBossName);
+    this.add.rectangle(800, 600, 1600, 1200, floorStyle.voidColor).setOrigin(0.5).setDepth(-3);
     const floor = this.add.tileSprite(800, 600, 1600, 1200, 'arena_floor').setOrigin(0.5).setDepth(-2);
-    // Native tile is 16×16; scale up to match previous 64×64 “gameplay” tile size
-    floor.setTileScale(4, 4);
-    floor.setTint(0xb0906a);
+    const ts = floorStyle.tileScale ?? 4;
+    floor.setTileScale(ts, ts);
+    floor.setTint(floorStyle.floorTint);
+    this._arenaFloorSprite = floor;
+    this._arenaFloorScrollVx = floorStyle.scrollVx ?? 0;
+    this._arenaFloorScrollVy = floorStyle.scrollVy ?? 0;
+
+    const floorPattern = this.add.graphics().setDepth(-1.5);
+    drawArenaFloorPattern(floorPattern, floorStyle);
 
     // Stone wall border (world-space, no scrollFactor override)
     const walls = this.add.graphics().setDepth(-1);
-    walls.fillStyle(0x2a1800, 1);
+    walls.fillStyle(floorStyle.wallFill, 1);
     walls.fillRect(0, 0, 1600, 48);
     walls.fillRect(0, 1152, 1600, 48);
     walls.fillRect(0, 0, 48, 1200);
     walls.fillRect(1552, 0, 48, 1200);
-    walls.lineStyle(2, 0x5a3010, 1);
+    walls.lineStyle(2, floorStyle.wallStroke, 1);
     walls.strokeRect(0, 0, 1600, 1200);
 
     // Vignette overlay (viewport-fixed)
@@ -80,7 +130,7 @@ export default class BossScene extends Phaser.Scene {
     // Torch particle emitters at arena corners
     const torchPositions = [[80, 80], [1520, 80], [80, 1120], [1520, 1120]];
     torchPositions.forEach(([tx, ty]) => {
-      this.add.particles(tx, ty, 'orb', {
+      this.add.particles(tx, ty, 'bullet', {
         speed: { min: 20, max: 60 },
         angle: { min: 250, max: 290 },
         scale: { start: 0.35, end: 0 },
@@ -95,7 +145,7 @@ export default class BossScene extends Phaser.Scene {
     });
 
     // Ambient ember particles rising across the arena
-    this.add.particles(800, 1100, 'orb', {
+    this.add.particles(800, 1100, 'bullet', {
       speed: { min: 5, max: 25 },
       angle: { min: 260, max: 280 },
       scale: { start: 0.2, end: 0 },
@@ -128,6 +178,10 @@ export default class BossScene extends Phaser.Scene {
     // Minions group
     this.minions = this.physics.add.group();
 
+    this.coinPickups = this.physics.add.group();
+    this._coinPickupRectA = new Phaser.Geom.Rectangle();
+    this._coinPickupRectB = new Phaser.Geom.Rectangle();
+
     // Spawn boss
     const bossName = BOSS_ORDER[this.bossIndex];
     const BossClass = BOSS_CLASSES[bossName];
@@ -157,20 +211,23 @@ export default class BossScene extends Phaser.Scene {
     if (this.boss) {
       this.physics.add.overlap(this.bullets, this.boss, (a, b) => {
         const bullet = (a.damage !== undefined) ? a : b;
-        if (bullet.active) {
-          const ix = bullet.x;
-          const iy = bullet.y;
-          const vx = bullet.body?.velocity?.x ?? 1;
-          const vy = bullet.body?.velocity?.y ?? 0;
-          const angleDeg = Math.atan2(vy, vx) * 180 / Math.PI;
-          const hitColor = bullet._hitColor ?? 0xffcc66;
-          const hitStyle = bullet._hitStyle ?? 'burst';
-          this.boss.takeDamage(bullet.damage, true); // true = isRanged
-          bullet.destroy();
-          hitDispatch(this, ix, iy, hitStyle, hitColor, angleDeg);
-          playHitRanged(this);
-          playHitArmor(this);
-        }
+        if (!bullet.active) return;
+        if (bullet._piercingHit?.has(this.boss)) return;
+        bullet._piercingHit?.add(this.boss);
+        const ix = bullet.x;
+        const iy = bullet.y;
+        const vx = bullet.body?.velocity?.x ?? 1;
+        const vy = bullet.body?.velocity?.y ?? 0;
+        const angleDeg = Math.atan2(vy, vx) * 180 / Math.PI;
+        const hitColor = bullet._hitColor ?? 0xffcc66;
+        const hitStyle = bullet._hitStyle ?? 'burst';
+        const dmg = bullet.damage;
+        this.boss.takeDamage(dmg, true);
+        if (bullet._poison) schedulePoisonDamage(this, this.boss, dmg, bullet._poison);
+        if (!bullet._piercing) bullet.destroy();
+        hitDispatch(this, ix, iy, hitStyle, hitColor, angleDeg);
+        playHitRanged(this);
+        playHitArmor(this);
       });
     }
 
@@ -189,35 +246,45 @@ export default class BossScene extends Phaser.Scene {
     this.physics.add.overlap(this.bullets, this.minions, (a, b) => {
       const bullet = (a.damage !== undefined) ? a : b;
       const minion = (a.damage !== undefined) ? b : a;
-      if (bullet.active && minion.active) {
-        minion.hp -= bullet.damage;
-        const mx = minion.x;
-        const my = minion.y;
-        const vx = bullet.body?.velocity?.x ?? 1;
-        const vy = bullet.body?.velocity?.y ?? 0;
-        const angleDeg = Math.atan2(vy, vx) * 180 / Math.PI;
-        const hitColor = bullet._hitColor ?? 0xaa8866;
-        const hitStyle = bullet._hitStyle ?? 'burst';
-        bullet.destroy();
-        if (minion.hp <= 0) {
-          deathPopParticles(this, mx, my);
-          playMinionDie(this);
-          minion.destroy();
-        } else {
-          hitDispatch(this, mx, my, hitStyle, hitColor, angleDeg);
-          playHitRanged(this);
-        }
+      if (!bullet.active || !minion.active) return;
+      if (bullet._piercingHit?.has(minion)) return;
+      bullet._piercingHit?.add(minion);
+      const dmg = bullet.damage;
+      minion.hp -= dmg;
+      const mx = minion.x;
+      const my = minion.y;
+      const vx = bullet.body?.velocity?.x ?? 1;
+      const vy = bullet.body?.velocity?.y ?? 0;
+      const angleDeg = Math.atan2(vy, vx) * 180 / Math.PI;
+      const hitColor = bullet._hitColor ?? 0xaa8866;
+      const hitStyle = bullet._hitStyle ?? 'burst';
+      if (bullet._poison) schedulePoisonDamage(this, minion, dmg, bullet._poison);
+      if (!bullet._piercing) bullet.destroy();
+      if (minion.hp <= 0) {
+        this._finishMinionCombatDeath(minion);
+      } else {
+        hitDispatch(this, mx, my, hitStyle, hitColor, angleDeg);
+        playHitRanged(this);
       }
     });
 
     // Split-screen cameras
     this._setupCameras();
     this._setupHUD();
-
-    this.add.text(640, 14, 'ESC — character select', {
-      fontFamily: FONT_FAMILY,
-      fontSize: '8px', color: '#555566',
-    }).setScrollFactor(0).setDepth(150);
+    if (this._playerCount === 2) {
+      const esc = (cx) => this.add.text(cx, 14, T.bossEscHint, {
+        fontFamily: FONT_FAMILY,
+        fontSize: '8px', color: '#555566',
+      }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(150);
+      this._escHintP1 = esc(320);
+      this._escHintP2 = esc(960);
+    } else {
+      this.add.text(640, 14, T.bossEscHint, {
+        fontFamily: FONT_FAMILY,
+        fontSize: '8px', color: '#555566',
+      }).setScrollFactor(0).setDepth(150);
+    }
+    this._bindHudToSplitCameras();
     this.input.keyboard.once('keydown-ESC', () => {
       this.scene.start('CharacterSelectScene');
     });
@@ -291,20 +358,41 @@ export default class BossScene extends Phaser.Scene {
     const barW = 200;
     const barH = 12;
     const y = 700;
-    const track = (cx, pid) => {
-      this.add.rectangle(cx, y, barW + 10, 28, 0x0f0800, 0.92).setStrokeStyle(2, COLORS.strokeDim).setScrollFactor(0).setDepth(98);
-      this.add.text(cx - barW / 2, y - 28, `P${pid}`, {
+    this._p1HudObjs = [];
+    this._p2HudObjs = [];
+    const track = (cx, pid, bucket) => {
+      const pad = this.add.rectangle(cx, y, barW + 10, 28, 0x0f0800, 0.92).setStrokeStyle(2, COLORS.strokeDim).setScrollFactor(0).setDepth(98);
+      const label = this.add.text(cx - barW / 2, y - 28, T.hudPlayer(pid), {
         fontFamily: FONT_FAMILY,
         fontSize: '10px',
         color: pid === 1 ? '#88ccff' : '#ffaa77',
       }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(100);
+      bucket.push(pad, label);
     };
-    track(120, 1);
+    track(120, 1, this._p1HudObjs);
     this._p1HpBar = this.add.rectangle(20, y, barW, barH, 0x44ff22).setScrollFactor(0).setDepth(100).setOrigin(0, 0.5);
+    this._p1HudObjs.push(this._p1HpBar);
     if (this._playerCount === 2) {
-      track(760, 2);
-      this._p2HpBar = this.add.rectangle(660, y, barW, barH, 0x44ff22).setScrollFactor(0).setDepth(100).setOrigin(0, 0.5);
+      // Right pane center ≈ 960 so P2 HUD stays inside the 640–1280 strip (was too close to the seam)
+      const cx2 = 960;
+      track(cx2, 2, this._p2HudObjs);
+      this._p2HpBar = this.add.rectangle(cx2 - barW / 2, y, barW, barH, 0x44ff22).setScrollFactor(0).setDepth(100).setOrigin(0, 0.5);
+      this._p2HudObjs.push(this._p2HpBar);
     }
+  }
+
+  /** Each split viewport only draws its own HUD + boss HP strip (fixed UI uses full-canvas x). */
+  _bindHudToSplitCameras() {
+    if (this._playerCount !== 2 || !this.cam2) return;
+    this._p1HudObjs.forEach((o) => this.cam2.ignore(o));
+    this._p2HudObjs.forEach((o) => this.cameras.main.ignore(o));
+    const boss = this.boss;
+    if (boss && boss._splitHpBar && boss._hpBarBg?.length === 2) {
+      this.cam2.ignore([boss._hpBarBg[0], boss._hpBarFill[0]]);
+      this.cameras.main.ignore([boss._hpBarBg[1], boss._hpBarFill[1]]);
+    }
+    if (this._escHintP1) this.cam2.ignore(this._escHintP1);
+    if (this._escHintP2) this.cameras.main.ignore(this._escHintP2);
   }
 
   _hpBarColor(ratio) {
@@ -351,7 +439,7 @@ export default class BossScene extends Phaser.Scene {
     const weapon = player.weaponData;
     const visuals = weapon.visuals ?? {};
     const angles = this._getBulletAngles(player, target, weapon);
-    const dmgPerBullet = calculateDamage(player.charData.rangedDamage, weapon.damageMultiplier, player.damageUpgradeCount);
+    const dmgPerBullet = calculateDamage(player.charData.rangedDamage, weapon.damageMultiplier, player.weaponTier);
 
     angles.forEach(angleDeg => {
       const texKey = visuals.bulletTexture ?? 'bullet';
@@ -361,9 +449,13 @@ export default class BossScene extends Phaser.Scene {
       b.setDisplaySize(bw, bh);
       b.body.setSize(8, 8);
       if (visuals.bulletRotate) b.setAngularVelocity(360);
+      if (visuals.tint !== undefined) b.setTint(visuals.tint);
       b._hitColor = visuals.hitColor ?? 0xffcc66;
       b._hitStyle = visuals.hitStyle ?? 'burst';
       b.damage = dmgPerBullet;
+      b._piercing = !!weapon.piercing;
+      b._piercingHit = new Set();
+      b._poison = weapon.poison ?? null;
       this.physics.velocityFromAngle(angleDeg, weapon.bulletSpeed, b.body.velocity);
       this.time.delayedCall(weapon.range / weapon.bulletSpeed * 1000, () => { if (b.active) b.destroy(); });
       if (visuals.trailColor) bulletTrail(this, b, visuals);
@@ -382,7 +474,7 @@ export default class BossScene extends Phaser.Scene {
   }
 
   _onPlayerMelee(player, target) {
-    const dmg = calculateDamage(player.charData.meleeDamage, player.weaponData.damageMultiplier, player.damageUpgradeCount);
+    const dmg = calculateDamage(player.charData.meleeDamage, player.weaponData.damageMultiplier, player.weaponTier);
     const ang = Phaser.Math.Angle.Between(player.x, player.y, target.x, target.y);
     meleeArc(this, player.x, player.y, ang);
     meleeConeParticles(this, player.x, player.y, ang);
@@ -390,7 +482,13 @@ export default class BossScene extends Phaser.Scene {
       target.takeDamage(dmg);
     } else if (target.hp !== undefined) {
       target.hp -= dmg;
-      if (target.hp <= 0) target.destroy();
+      if (target.hp <= 0) {
+        if (this.minions.contains(target)) {
+          this._finishMinionCombatDeath(target);
+        } else {
+          target.destroy();
+        }
+      }
     }
     if (player.playerId === 1) this._p1Damage += dmg;
     else this._p2Damage += dmg; // stays 0 in 1P mode; _onBossDefeated only reads it for pid=2
@@ -415,6 +513,58 @@ export default class BossScene extends Phaser.Scene {
       m.setDisplaySize(24, 24);
       m.hp = 30;
       m.maxHp = 30;
+      m.dropsCoins = true;
+    }
+  }
+
+  _finishMinionCombatDeath(minion) {
+    if (!minion || !minion.active) return;
+    const x = minion.x;
+    const y = minion.y;
+    deathPopParticles(this, x, y);
+    playMinionDie(this);
+    if (minionShouldDropCoins(minion)) this._spawnCoinPickup(x, y);
+    minion.destroy();
+  }
+
+  _spawnCoinPickup(worldX, worldY) {
+    const coin = this.coinPickups.create(worldX, worldY, 'bullet');
+    if (!coin) return;
+    coin.setDisplaySize(14, 14);
+    coin.setTint(0xffcc44);
+    coin.body.setAllowGravity(false);
+    coin.body.setImmovable(true);
+    coin.body.setSize(18, 18);
+    this.tweens.add({
+      targets: coin,
+      y: worldY - 8,
+      duration: 700,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+    this.time.delayedCall(MINION_COIN_DESPAWN_MS, () => {
+      if (coin.active) coin.destroy();
+    });
+  }
+
+  _processCoinPickups() {
+    const coins = [...this.coinPickups.getChildren()];
+    for (let i = 0; i < coins.length; i++) {
+      const coin = coins[i];
+      if (!coin.active) continue;
+      const eligible = this.players
+        .filter((p) => {
+          if (p.isDowned || !p.body?.enable || !coin.body?.enable) return false;
+          coin.body.getBounds(this._coinPickupRectA);
+          p.body.getBounds(this._coinPickupRectB);
+          return Phaser.Geom.Intersects.RectangleToRectangle(this._coinPickupRectA, this._coinPickupRectB);
+        })
+        .sort((a, b) => a.playerId - b.playerId);
+      if (eligible.length === 0) continue;
+      this.shopManager.addCoins(eligible[0].characterId, MINION_COIN_VALUE);
+      playUiConfirm(this);
+      coin.destroy();
     }
   }
 
@@ -432,17 +582,20 @@ export default class BossScene extends Phaser.Scene {
     // Add clones to the bullets overlap and player targeting
     clones.forEach(clone => {
       this.physics.add.overlap(this.bullets, clone, (bullet, cl) => {
-        if (bullet.active && cl.active && cl.takeDamage) {
-          const ix = bullet.x;
-          const iy = bullet.y;
-          const vx = bullet.body?.velocity?.x ?? 1;
-          const vy = bullet.body?.velocity?.y ?? 0;
-          const angleDeg = Math.atan2(vy, vx) * 180 / Math.PI;
-          cl.takeDamage(bullet.damage);
-          bullet.destroy();
-          hitDispatch(this, ix, iy, bullet._hitStyle ?? 'burst', 0xcc88ff, angleDeg);
-          playHitRanged(this);
-        }
+        if (!bullet.active || !cl.active || !cl.takeDamage) return;
+        if (bullet._piercingHit?.has(cl)) return;
+        bullet._piercingHit?.add(cl);
+        const ix = bullet.x;
+        const iy = bullet.y;
+        const vx = bullet.body?.velocity?.x ?? 1;
+        const vy = bullet.body?.velocity?.y ?? 0;
+        const angleDeg = Math.atan2(vy, vx) * 180 / Math.PI;
+        const dmg = bullet.damage;
+        cl.takeDamage(dmg);
+        if (bullet._poison) schedulePoisonDamage(this, cl, dmg, bullet._poison);
+        if (!bullet._piercing) bullet.destroy();
+        hitDispatch(this, ix, iy, bullet._hitStyle ?? 'burst', 0xcc88ff, angleDeg);
+        playHitRanged(this);
       });
     });
     this._shadowClones = clones;
@@ -538,12 +691,20 @@ export default class BossScene extends Phaser.Scene {
   }
 
   update(time, delta) {
+    if (this._arenaFloorSprite) {
+      this._arenaFloorSprite.tilePositionX += (this._arenaFloorScrollVx ?? 0) * delta;
+      this._arenaFloorSprite.tilePositionY += (this._arenaFloorScrollVy ?? 0) * delta;
+    }
     this._checkRevive(delta);
+    this._processCoinPickups();
     this._updateHUD();
     if (!this.boss) return;
 
-    // Safety net: boss at 0 HP must trigger defeat (handles event/listener failures)
-    if (this.boss.hp !== undefined && (this.boss.hp <= 0 || this.boss.hp < 0.01) && !this._bossDefeated) {
+    // Safety net: boss at 0 / negligible HP must trigger defeat (handles event/listener failures)
+    if (
+      this.boss.hp !== undefined &&
+      shouldBossBeDefeated(this.boss.hp, !!this._bossDefeated, this.boss.maxHp)
+    ) {
       this._onBossDefeated();
       return;
     }

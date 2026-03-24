@@ -12,8 +12,10 @@ function findTarget(player, boss, minions) {
   );
 }
 
-function calculateDamage(baseDamage, weaponMultiplier, damageUpgradeCount) {
-  return baseDamage * weaponMultiplier * Math.pow(1.15, damageUpgradeCount);
+/** @param {number} weaponTier Shard upgrade tier (0 = unlocked base only). */
+function calculateDamage(baseDamage, weaponMultiplier, weaponTier) {
+  const t = Number.isFinite(weaponTier) && weaponTier > 0 ? Math.floor(weaponTier) : 0;
+  return baseDamage * weaponMultiplier * Math.pow(1.09, t);
 }
 
 // CommonJS export for Jest; browser usage handled via a wrapper module

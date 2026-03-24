@@ -12,23 +12,19 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     scene.physics.add.existing(this);
 
     this.playerId = playerId;
+    this.characterId = characterId;
     this.shopManager = shopManager;
     this.charData = CHARACTERS[characterId];
 
-    // Apply upgrades from shop
-    const upgrades = shopManager.getUpgradesForPlayer(playerId);
-    const hpBonus = (upgrades.hpUp ?? 0) * 20;
-    const speedBonus = Math.pow(1.10, upgrades.speedUp ?? 0);
-    const reviveReduction = (upgrades.fastRevive ?? 0) * 1000;
-
-    this.maxHp = this.charData.hp + hpBonus;
+    this.maxHp = this.charData.hp;
     this.hp = this.maxHp;
-    this.speed = this.charData.speed * speedBonus;
-    this.reviveChannelTime = Math.max(1000, 3000 - reviveReduction);
-    this.damageUpgradeCount = upgrades.damageUp ?? 0;
+    this.speed = this.charData.speed;
+    this.reviveChannelTime = 3000;
 
-    this.weaponId = shopManager.getEquippedWeapon(playerId);
-    this.weaponData = WEAPONS[this.weaponId];
+    this.weaponId = shopManager.getEquippedWeapon(characterId);
+    this.weaponData = WEAPONS[this.weaponId] ?? WEAPONS.default;
+    const wt = shopManager.getWeaponTier(characterId, this.weaponId);
+    this.weaponTier = this.weaponId === 'default' ? 0 : Math.max(0, wt);
 
     this.isDowned = false;
     this._lastFired = 0;
@@ -58,6 +54,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
   takeDamage(amount) {
     if (this.isDowned) return;
     this.hp = Math.max(0, this.hp - amount);
+    this.emit('hurt', this, amount);
     if (this.hp <= 0) this.goDown();
   }
 

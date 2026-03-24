@@ -1,19 +1,23 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8" />
-  <title>Boss Rush</title>
+  <title>מרדף בוסים</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     * { margin: 0; padding: 0; }
-    body { background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; }
-    canvas { display: block; }
+    body {
+      background: radial-gradient(ellipse 120% 100% at 50% 30%, #1a1530 0%, #0a0814 45%, #000000 100%);
+      display: flex; justify-content: center; align-items: center;
+      min-height: 100vh;
+    }
+    canvas { display: block; box-shadow: 0 0 0 2px #2a2840, 0 12px 48px rgba(0, 0, 0, 0.65); }
   </style>
 </head>
 <body>
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
-  <script type="module" src="src/main.js"></script>
+  <script type="module" src="/src/main.js"></script>
 </body>
 </html>

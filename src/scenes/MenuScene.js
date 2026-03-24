@@ -1,4 +1,5 @@
 import { FONT_FAMILY, addMenuBackdrop, addTitleUnderline } from '../ui/theme.js';
+import { T } from '../i18n/hebrew.js';
 import { playUiConfirm, playUiNav } from '../audio/sfx.js';
 import { ensureBgm } from '../audio/music.js';
 import { createAudioControls } from '../ui/audioControls.js';
@@ -23,7 +24,7 @@ export default class MenuScene extends Phaser.Scene {
     frame.fillRect(cx - 285, cy + 228, 12, 12);
     frame.fillRect(cx + 273, cy + 228, 12, 12);
 
-    const titleText = this.add.text(cx, cy - 150, 'BOSS RUSH', {
+    const titleText = this.add.text(cx, cy - 150, T.gameTitle, {
       fontFamily: FONT_FAMILY,
       fontSize: '40px', color: '#ffcc44',
       stroke: '#441100', strokeThickness: 8,
@@ -66,11 +67,11 @@ export default class MenuScene extends Phaser.Scene {
 
     // Mode selection (default: 1 player)
     this._playerCount = 1;
-    const opt1 = this.add.text(cx - 110, cy - 60, '1 Player',  { fontFamily: FONT_FAMILY, fontSize: '14px', color: '#aaaaaa' }).setOrigin(0.5);
-    const opt2 = this.add.text(cx + 110, cy - 60, '2 Players', { fontFamily: FONT_FAMILY, fontSize: '14px', color: '#ffffff' }).setOrigin(0.5);
+    const opt1 = this.add.text(cx - 110, cy - 60, T.onePlayer,  { fontFamily: FONT_FAMILY, fontSize: '14px', color: '#aaaaaa' }).setOrigin(0.5);
+    const opt2 = this.add.text(cx + 110, cy - 60, T.twoPlayers, { fontFamily: FONT_FAMILY, fontSize: '14px', color: '#ffffff' }).setOrigin(0.5);
 
     const controlsHint = this.add.text(cx, cy + 130, '', { fontFamily: FONT_FAMILY, fontSize: '11px', color: '#888888' }).setOrigin(0.5);
-    this.add.text(cx, cy + 165, 'Auto-fire  •  Auto-melee  •  Revive your teammate', {
+    this.add.text(cx, cy + 165, T.gameplayHint, {
       fontFamily: FONT_FAMILY,
       fontSize: '9px', color: '#666666',
     }).setOrigin(0.5);
@@ -80,22 +81,31 @@ export default class MenuScene extends Phaser.Scene {
       opt2.setColor(this._playerCount === 2 ? '#ffffff' : '#aaaaaa');
       controlsHint.setText(
         this._playerCount === 1
-          ? 'Player 1: WASD'
-          : 'Player 1: WASD     Player 2: Arrow Keys'
+          ? T.controlsP1Only
+          : T.controlsP1P2
       );
     };
     updateMode();
 
-    const startBtn = this.add.text(cx, cy + 40, '▶ PRESS ENTER TO START', {
+    const startBtn = this.add.text(cx, cy + 40, T.pressEnterStart, {
       fontFamily: FONT_FAMILY,
       fontSize: '14px', color: '#66ffaa',
       stroke: '#114422', strokeThickness: 3,
     }).setOrigin(0.5);
     this.tweens.add({ targets: startBtn, alpha: 0.35, duration: 700, yoyo: true, repeat: -1 });
 
+    const shopBtn = this.add.text(cx, cy + 90, T.shopFromMenu, {
+      fontFamily: FONT_FAMILY,
+      fontSize: '12px', color: '#ffbb44',
+      stroke: '#4a3510', strokeThickness: 3,
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    shopBtn.on('pointerover', () => shopBtn.setColor('#ffeeaa'));
+    shopBtn.on('pointerout',  () => shopBtn.setColor('#ffbb44'));
+    shopBtn.on('pointerdown', () => this._openShop());
+
     this._resetConfirming = false;
     this._resetPromptText = null;
-    const resetHint = this.add.text(cx, cy + 195, 'R — reset all hero progress', {
+    const resetHint = this.add.text(cx, cy + 195, T.resetProgressHint, {
       fontFamily: FONT_FAMILY,
       fontSize: '8px', color: '#555555',
     }).setOrigin(0.5);
@@ -107,7 +117,7 @@ export default class MenuScene extends Phaser.Scene {
       this._resetConfirming = true;
       playUiNav(this);
       if (this._resetPromptText) this._resetPromptText.destroy();
-      this._resetPromptText = this.add.text(cx, cy + 225, 'Reset progress? [Y] Confirm  [N] Cancel', {
+      this._resetPromptText = this.add.text(cx, cy + 225, T.resetConfirmPrompt, {
         fontFamily: FONT_FAMILY,
         fontSize: '10px', color: '#ffaa44',
       }).setOrigin(0.5);
@@ -117,7 +127,7 @@ export default class MenuScene extends Phaser.Scene {
       heroShop.clearHeroShop();
       playUiConfirm(this);
       if (this._resetPromptText) this._resetPromptText.destroy();
-      this._resetPromptText = this.add.text(cx, cy + 225, 'Progress reset.', {
+      this._resetPromptText = this.add.text(cx, cy + 225, T.resetDone, {
         fontFamily: FONT_FAMILY,
         fontSize: '10px', color: '#44ff44',
       }).setOrigin(0.5);
@@ -132,6 +142,10 @@ export default class MenuScene extends Phaser.Scene {
       if (this._resetPromptText) this._resetPromptText.destroy();
       this._resetPromptText = null;
     });
+    this.input.keyboard.on('keydown-S', () => {
+      if (this._resetConfirming) return;
+      this._openShop();
+    });
     this.input.keyboard.on('keydown-ENTER', () => {
       if (this._resetConfirming) return;
       playUiConfirm(this);
@@ -142,5 +156,16 @@ export default class MenuScene extends Phaser.Scene {
 
     ensureBgm(this, 'music_menu');
     createAudioControls(this);
+  }
+
+  _openShop() {
+    playUiConfirm(this);
+    this.registry.set('playerCount', this._playerCount);
+    this.registry.set('shopManager', ShopManager.load(heroShop));
+    const chars = this._playerCount === 1
+      ? { 1: 'brute' }
+      : { 1: 'brute', 2: 'scout' };
+    this.registry.set('selectedCharacters', chars);
+    this.scene.start('ShopScene');
   }
 }

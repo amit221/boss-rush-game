@@ -1,0 +1,13 @@
+SFX (CC0): Kenney — Interface Sounds + Impact Sounds
+https://kenney.nl/assets/interface-sounds
+https://kenney.nl/assets/impact-sounds
+
+Music (CC0) — OpenGameArt.org
+
+Menu / shop / results screens: "Chiptune Battle Music" (loop) by pmiller
+https://opengameart.org/content/chiptune-battle-music
+File on site: battle_music_01-loop.ogg (stored as music_menu.ogg)
+
+Boss fights / arena: "8bit Action Miniboss Battle" by MintoDog
+https://opengameart.org/content/8bit-action-miniboss-battle
+File on site: 8bit_action_miniboss_battle_bpm175_0.ogg (stored as music_battle.ogg)

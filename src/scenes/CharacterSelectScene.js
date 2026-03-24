@@ -1,5 +1,6 @@
 import { CHARACTERS } from '../data/characters.js';
 import { FONT_FAMILY, addMenuBackdrop } from '../ui/theme.js';
+import { T } from '../i18n/hebrew.js';
 import { playUiConfirm, playUiNav, playUiBack } from '../audio/sfx.js';
 import { ensureBgm } from '../audio/music.js';
 import { createAudioControls } from '../ui/audioControls.js';
@@ -18,15 +19,15 @@ export default class CharacterSelectScene extends Phaser.Scene {
     addMenuBackdrop(this);
     this.add.rectangle(640, 360, 1240, 680, 0x000000, 0.15).setDepth(-9);
 
-    this.add.text(640, 35, 'SELECT YOUR CHARACTER', {
+    this.add.text(640, 35, T.selectCharacter, {
       fontFamily: FONT_FAMILY,
       fontSize: '22px', color: '#ffcc44',
       stroke: '#441100', strokeThickness: 4,
     }).setOrigin(0.5).setDepth(1);
 
-    this.add.text(320, 90, 'PLAYER 1  (WASD)', { fontFamily: FONT_FAMILY, fontSize: '12px', color: '#4488ff' }).setOrigin(0.5);
+    this.add.text(320, 90, T.player1Wasd, { fontFamily: FONT_FAMILY, fontSize: '12px', color: '#4488ff' }).setOrigin(0.5);
     this._p2Els.push(
-      this.add.text(960, 90, 'PLAYER 2  (ARROWS)', { fontFamily: FONT_FAMILY, fontSize: '12px', color: '#ff8844' }).setOrigin(0.5)
+      this.add.text(960, 90, T.player2Arrows, { fontFamily: FONT_FAMILY, fontSize: '12px', color: '#ff8844' }).setOrigin(0.5)
     );
 
     // Draw character cards for both sides
@@ -44,9 +45,9 @@ export default class CharacterSelectScene extends Phaser.Scene {
       this.add.circle(x1, y - 60, 42, 0xff8800, 0.2);
       this.add.image(x1, y - 60, char.textureKey).setDisplaySize(72, 72);
       this.add.text(x1, y + 10, char.name, { fontFamily: FONT_FAMILY, fontSize: '14px', color: '#ffffff' }).setOrigin(0.5);
-      this.add.text(x1, y + 45, `HP: ${char.hp}`, { fontFamily: FONT_FAMILY, fontSize: '10px', color: '#aaaaaa' }).setOrigin(0.5);
-      this.add.text(x1, y + 65, `SPD: ${char.speed}`, { fontFamily: FONT_FAMILY, fontSize: '10px', color: '#aaaaaa' }).setOrigin(0.5);
-      this.add.text(x1, y + 85, `DMG: ${char.rangedDamage}/${char.meleeDamage}`, { fontFamily: FONT_FAMILY, fontSize: '10px', color: '#aaaaaa' }).setOrigin(0.5);
+      this.add.text(x1, y + 45, T.statHp(char.hp), { fontFamily: FONT_FAMILY, fontSize: '10px', color: '#aaaaaa' }).setOrigin(0.5);
+      this.add.text(x1, y + 65, T.statSpd(char.speed), { fontFamily: FONT_FAMILY, fontSize: '10px', color: '#aaaaaa' }).setOrigin(0.5);
+      this.add.text(x1, y + 85, T.statDmg(char.rangedDamage, char.meleeDamage), { fontFamily: FONT_FAMILY, fontSize: '10px', color: '#aaaaaa' }).setOrigin(0.5);
       this._cards1.push(bg1);
 
       // P2 card — collect all elements for hiding
@@ -56,9 +57,9 @@ export default class CharacterSelectScene extends Phaser.Scene {
       const glow2 = this.add.circle(x2, y - 60, 42, 0xff8800, 0.2);
       const img2    = this.add.image(x2, y - 60, char.textureKey).setDisplaySize(72, 72);
       const name2   = this.add.text(x2, y + 10, char.name, { fontFamily: FONT_FAMILY, fontSize: '14px', color: '#ffffff' }).setOrigin(0.5);
-      const hp2     = this.add.text(x2, y + 45, `HP: ${char.hp}`, { fontFamily: FONT_FAMILY, fontSize: '10px', color: '#aaaaaa' }).setOrigin(0.5);
-      const spd2    = this.add.text(x2, y + 65, `SPD: ${char.speed}`, { fontFamily: FONT_FAMILY, fontSize: '10px', color: '#aaaaaa' }).setOrigin(0.5);
-      const dmg2    = this.add.text(x2, y + 85, `DMG: ${char.rangedDamage}/${char.meleeDamage}`, { fontFamily: FONT_FAMILY, fontSize: '10px', color: '#aaaaaa' }).setOrigin(0.5);
+      const hp2     = this.add.text(x2, y + 45, T.statHp(char.hp), { fontFamily: FONT_FAMILY, fontSize: '10px', color: '#aaaaaa' }).setOrigin(0.5);
+      const spd2    = this.add.text(x2, y + 65, T.statSpd(char.speed), { fontFamily: FONT_FAMILY, fontSize: '10px', color: '#aaaaaa' }).setOrigin(0.5);
+      const dmg2    = this.add.text(x2, y + 85, T.statDmg(char.rangedDamage, char.meleeDamage), { fontFamily: FONT_FAMILY, fontSize: '10px', color: '#aaaaaa' }).setOrigin(0.5);
       this._cards2.push(bg2);
       this._p2Els.push(bg2, color2, glow2, img2, name2, hp2, spd2, dmg2);
     });
@@ -69,8 +70,8 @@ export default class CharacterSelectScene extends Phaser.Scene {
     this._p2Els.push(this._cursor2);
 
     // Status texts
-    this._status1 = this.add.text(320, 590, 'A/D to select  •  ENTER to confirm  •  ESC back', { fontFamily: FONT_FAMILY, fontSize: '8px', color: '#4488ff' }).setOrigin(0.5);
-    this._status2 = this.add.text(960, 590, 'LEFT/RIGHT  •  SHIFT confirm  •  ESC back', { fontFamily: FONT_FAMILY, fontSize: '8px', color: '#ff8844' }).setOrigin(0.5);
+    this._status1 = this.add.text(320, 590, T.charSelectHintP1, { fontFamily: FONT_FAMILY, fontSize: '8px', color: '#4488ff' }).setOrigin(0.5);
+    this._status2 = this.add.text(960, 590, T.charSelectHintP2, { fontFamily: FONT_FAMILY, fontSize: '8px', color: '#ff8844' }).setOrigin(0.5);
     this._p2Els.push(this._status2);
 
     if (this._playerCount === 1) {
@@ -142,7 +143,8 @@ export default class CharacterSelectScene extends Phaser.Scene {
     this._confirmed[pid] = true;
     playUiConfirm(this);
     const label = pid === 1 ? this._status1 : this._status2;
-    label.setText(`✓ ${charId.toUpperCase()} CONFIRMED`).setColor('#44ff44');
+    const picked = chars.find((c) => c.id === charId);
+    label.setText(T.characterConfirmed(picked?.name ?? charId)).setColor('#44ff44');
 
     if (this._confirmed[1] && this._confirmed[2]) {
       this.registry.set('selectedCharacters', {

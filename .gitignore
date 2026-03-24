@@ -1,1 +1,19 @@
 .worktrees/
+dist/
+node_modules/
+
+# local env / secrets
+.env
+.env.*
+!.env.example
+
+# OS / crash junk
+.DS_Store
+Thumbs.db
+bash.exe.stackdump
+
+# Superpowers brainstorm server artifacts (not game source)
+.superpowers/
+
+# Claude Code — keep repo settings out of git if you add them later
+.claude/settings.local.json

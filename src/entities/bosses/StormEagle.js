@@ -46,8 +46,9 @@ export default class StormEagle extends BaseBoss {
   _startDive(alivePlayers) {
     this._diving = true;
     const target = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
-    // Dive to target position
-    this.scene.physics.moveToObject(this, target, 360);
+    // Lock aim at dive start so the dash can be sidestepped (avoid homing on the player object)
+    const aim = { x: target.x, y: target.y };
+    this.scene.physics.moveToObject(this, aim, 360);
     this.scene.time.delayedCall(600, () => {
       this.setVelocity(0, 0);
       this._diving = false;
@@ -55,16 +56,20 @@ export default class StormEagle extends BaseBoss {
   }
 
   _lightningStrike(player) {
-    // Warning indicator at player position
-    const warn = this.scene.add.rectangle(player.x, player.y, 40, 40, 0xffff00, 0.4);
+    // Snapshot strike zone — damage only if still inside after telegraph (dodgeable)
+    const sx = player.x;
+    const sy = player.y;
+    const half = 20; // matches 40×40 warning rect
+    const warn = this.scene.add.rectangle(sx, sy, 40, 40, 0xffff00, 0.4);
     this.scene.time.delayedCall(600, () => {
       warn.destroy();
-      if (!player.isDowned) {
-        player.takeDamage(30);
-        // Flash
-        const flash = this.scene.add.rectangle(player.x, player.y, 20, 200, 0xffffff, 0.8);
-        this.scene.time.delayedCall(150, () => flash.destroy());
-      }
+      if (player.isDowned) return;
+      const inside =
+        Math.abs(player.x - sx) <= half && Math.abs(player.y - sy) <= half;
+      if (!inside) return;
+      player.takeDamage(30);
+      const flash = this.scene.add.rectangle(player.x, player.y, 20, 200, 0xffffff, 0.8);
+      this.scene.time.delayedCall(150, () => flash.destroy());
     });
   }
 }

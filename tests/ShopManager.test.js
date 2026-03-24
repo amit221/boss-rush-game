@@ -5,56 +5,72 @@ describe('ShopManager', () => {
   beforeEach(() => { shop = new ShopManager(); });
 
   test('starts with 0 coins', () => {
-    expect(shop.getCoins(1)).toBe(0);
-    expect(shop.getCoins(2)).toBe(0);
+    expect(shop.getCoins('brute')).toBe(0);
+    expect(shop.getCoins('scout')).toBe(0);
   });
 
   test('awards coins after boss defeat', () => {
-    shop.awardBossCoins(1, { survived: true, underTime: true, mostDamage: false });
-    expect(shop.getCoins(1)).toBe(115); // 100 + 20 + 15
+    shop.awardBossCoins('brute', { survived: true, underTime: true, mostDamage: false });
+    expect(shop.getCoins('brute')).toBe(115);
   });
 
   test('awards full bonus when all criteria met', () => {
-    shop.awardBossCoins(1, { survived: true, underTime: true, mostDamage: true });
-    expect(shop.getCoins(1)).toBe(150); // 100 + 20 + 15 + 15
+    shop.awardBossCoins('brute', { survived: true, underTime: true, mostDamage: true });
+    expect(shop.getCoins('brute')).toBe(150);
   });
 
-  test('can buy weapon if enough coins', () => {
-    shop.addCoins(1, 100);
-    const result = shop.buyWeapon(1, 'sniper'); // costs 100
-    expect(result).toBe(true);
-    expect(shop.getCoins(1)).toBe(0);
-    expect(shop.getEquippedWeapon(1)).toBe('sniper');
+  test('buyWeaponShard adds shard and spends coins', () => {
+    shop.addCoins('brute', 100);
+    const ok = shop.buyWeaponShard('brute', 'sniper');
+    expect(ok).toBe(true);
+    expect(shop.getShardCount('brute', 'sniper')).toBe(1);
+    expect(shop.getCoins('brute')).toBe(65);
   });
 
-  test('cannot buy weapon if insufficient coins', () => {
-    shop.addCoins(1, 50);
-    const result = shop.buyWeapon(1, 'sniper'); // costs 100
-    expect(result).toBe(false);
-    expect(shop.getCoins(1)).toBe(50);
+  test('advanceWeaponWithShards unlocks with first shard', () => {
+    shop.addCoins('brute', 500);
+    shop.buyWeaponShard('brute', 'shotgun');
+    expect(shop.getWeaponTier('brute', 'shotgun')).toBe(-1);
+    expect(shop.advanceWeaponWithShards('brute', 'shotgun')).toBe(true);
+    expect(shop.getWeaponTier('brute', 'shotgun')).toBe(0);
+    expect(shop.getShardCount('brute', 'shotgun')).toBe(0);
   });
 
-  test('stat upgrade capped at 3 per run', () => {
-    shop.addCoins(1, 1000);
-    shop.buyUpgrade(1, 'damageUp');
-    shop.buyUpgrade(1, 'damageUp');
-    shop.buyUpgrade(1, 'damageUp');
-    const result = shop.buyUpgrade(1, 'damageUp'); // 4th purchase
-    expect(result).toBe(false);
+  test('advanceWeaponWithShards upgrade costs double shards', () => {
+    shop.addCoins('brute', 2000);
+    shop.buyWeaponShard('brute', 'shotgun');
+    shop.advanceWeaponWithShards('brute', 'shotgun');
+    shop.buyWeaponShard('brute', 'shotgun');
+    shop.buyWeaponShard('brute', 'shotgun');
+    expect(shop.advanceWeaponWithShards('brute', 'shotgun')).toBe(true);
+    expect(shop.getWeaponTier('brute', 'shotgun')).toBe(1);
+    expect(shop.getShardCount('brute', 'shotgun')).toBe(0);
   });
 
-  test('getUpgradeCount returns correct count', () => {
-    shop.addCoins(1, 200);
-    shop.buyUpgrade(1, 'hpUp');
-    shop.buyUpgrade(1, 'hpUp');
-    expect(shop.getUpgradeCount(1, 'hpUp')).toBe(2);
+  test('setEquippedWeapon requires unlock', () => {
+    expect(shop.setEquippedWeapon('brute', 'sniper')).toBe(false);
+    shop.addCoins('brute', 500);
+    shop.buyWeaponShard('brute', 'sniper');
+    shop.advanceWeaponWithShards('brute', 'sniper');
+    expect(shop.setEquippedWeapon('brute', 'sniper')).toBe(true);
+    expect(shop.getEquippedWeapon('brute')).toBe('sniper');
   });
 
-  test('reset clears all state', () => {
-    shop.addCoins(1, 200);
-    shop.buyUpgrade(1, 'hpUp');
-    shop.reset();
-    expect(shop.getCoins(1)).toBe(0);
-    expect(shop.getUpgradeCount(1, 'hpUp')).toBe(0);
+  test('buyMysteryBox spends coins and grants shards', () => {
+    shop.addCoins('brute', 200);
+    const roll = shop.buyMysteryBox('brute');
+    expect(roll).toBeTruthy();
+    expect(roll.weaponId).toBeTruthy();
+    expect(roll.shards).toBe(2);
+    expect(shop.getCoins('brute')).toBe(160);
+    expect(shop.getShardCount('brute', roll.weaponId)).toBe(2);
+  });
+
+  test('resetAllHeroes clears all state', () => {
+    shop.addCoins('brute', 200);
+    shop.buyWeaponShard('brute', 'shotgun');
+    shop.resetAllHeroes();
+    expect(shop.getCoins('brute')).toBe(0);
+    expect(shop.getShardCount('brute', 'shotgun')).toBe(0);
   });
 });

@@ -1,5 +1,6 @@
 import BootScene from './scenes/BootScene.js';
 import MenuScene from './scenes/MenuScene.js';
+import BossSelectScene from './scenes/BossSelectScene.js';
 import CharacterSelectScene from './scenes/CharacterSelectScene.js';
 import BossScene from './scenes/BossScene.js';
 import ShopScene from './scenes/ShopScene.js';
@@ -19,7 +20,7 @@ const config = {
     default: 'arcade',
     arcade: { debug: false }
   },
-  scene: [BootScene, MenuScene, CharacterSelectScene, BossScene, ShopScene, GameOverScene, VictoryScene]
+  scene: [BootScene, MenuScene, BossSelectScene, CharacterSelectScene, BossScene, ShopScene, GameOverScene, VictoryScene]
 };
 
 new Phaser.Game(config);

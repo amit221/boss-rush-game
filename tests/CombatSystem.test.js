@@ -34,7 +34,7 @@ describe('calculateDamage', () => {
     expect(calculateDamage(20, 2.0, 0)).toBe(40);
   });
 
-  test('applies damage upgrades (15% per upgrade)', () => {
-    expect(calculateDamage(20, 1.0, 2)).toBeCloseTo(26.45, 1); // 20 * 1.15^2
+  test('applies weapon shard tier (9% per tier)', () => {
+    expect(calculateDamage(20, 1.0, 2)).toBeCloseTo(20 * 1.09 * 1.09, 4);
   });
 });

@@ -1,5 +1,5 @@
-/** Shared typography (matches Google Font in index.html) */
-export const FONT_FAMILY = '"Press Start 2P", monospace';
+/** Shared typography (matches Google Font in index.html; Hebrew-capable) */
+export const FONT_FAMILY = '"Heebo", "Noto Sans Hebrew", sans-serif';
 
 /** Phaser hex + CSS strings for one coherent “arcade dungeon” look */
 export const COLORS = {

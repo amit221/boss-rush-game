@@ -1,68 +1,165 @@
-const WEAPON_PRICES = { shotgun: 80, sniper: 100, boomerang: 90, flamethrower: 120 };
-const UPGRADE_PRICES = { hpUp: 50, speedUp: 60, damageUp: 70, fastRevive: 80 };
-const MAX_UPGRADES = 3;
+import { WEAPONS } from '../data/weapons.js';
+import {
+  getShardCoinPrice,
+  MYSTERY_BOX_COIN_PRICE,
+  rollMysteryBoxWeapon,
+  shardsRequiredForNextAdvance,
+} from '../data/weaponEconomy.js';
+
+const NOOP_STORAGE = {
+  loadHeroShop: () => ({}),
+  saveHeroShop: () => {},
+  clearHeroShop: () => {},
+};
+
+function defaultCharState() {
+  return {
+    coins: 0,
+    weapon: 'default',
+    shards: {},
+    tiers: {},
+  };
+}
 
 class ShopManager {
-  constructor() { this.reset(); }
-
-  reset() {
-    this._coins = { 1: 0, 2: 0 };
-    this._weapons = { 1: 'default', 2: 'default' };
-    this._upgrades = { 1: {}, 2: {} };
+  constructor(storage = NOOP_STORAGE) {
+    this._storage = storage;
+    this._byChar = {};
+    this._load();
   }
 
-  getCoins(playerId) { return this._coins[playerId] ?? 0; }
-  addCoins(playerId, amount) { this._coins[playerId] = (this._coins[playerId] ?? 0) + amount; }
+  _load() {
+    const loaded = this._storage.loadHeroShop();
+    this._byChar = { ...loaded };
+  }
 
-  awardBossCoins(playerId, { survived, underTime, mostDamage }) {
-    // Base: 100. survived: prerequisite (no extra). underTime: +15. mostDamage: +35.
-    // test 1: survived=T, underTime=T, mostDamage=F → 100+15 = 115
-    // test 2: survived=T, underTime=T, mostDamage=T → 100+15+35 = 150
+  _ensure(charId) {
+    if (!this._byChar[charId]) {
+      this._byChar[charId] = defaultCharState();
+    }
+    const s = this._byChar[charId];
+    if (typeof s.coins !== 'number') s.coins = 0;
+    if (typeof s.weapon !== 'string') s.weapon = 'default';
+    if (!s.shards || typeof s.shards !== 'object') s.shards = {};
+    if (!s.tiers || typeof s.tiers !== 'object') s.tiers = {};
+    return s;
+  }
+
+  _save() {
+    this._storage.saveHeroShop(this._byChar);
+  }
+
+  _tier(s, weaponId) {
+    if (weaponId === 'default') return 0;
+    const t = s.tiers[weaponId];
+    if (typeof t !== 'number') return -1;
+    return t;
+  }
+
+  _setTier(s, weaponId, tier) {
+    if (weaponId === 'default') return;
+    s.tiers[weaponId] = tier;
+  }
+
+  getCoins(characterId) {
+    return this._ensure(characterId).coins;
+  }
+
+  addCoins(characterId, amount) {
+    const s = this._ensure(characterId);
+    s.coins = Math.max(0, (s.coins ?? 0) + amount);
+    this._save();
+  }
+
+  awardBossCoins(characterId, { survived, underTime, mostDamage }) {
     let total = 100;
     if (underTime) total += 15;
     if (mostDamage) total += 35;
-    this.addCoins(playerId, total);
+    this.addCoins(characterId, total);
   }
 
-  getEquippedWeapon(playerId) { return this._weapons[playerId] ?? 'default'; }
+  getEquippedWeapon(characterId) {
+    const s = this._ensure(characterId);
+    const w = s.weapon ?? 'default';
+    if (w !== 'default' && this._tier(s, w) < 0) {
+      s.weapon = 'default';
+      this._save();
+    }
+    return s.weapon;
+  }
 
-  buyWeapon(playerId, weaponId) {
-    const price = WEAPON_PRICES[weaponId];
-    if (!price || this._coins[playerId] < price) return false;
-    this._coins[playerId] -= price;
-    this._weapons[playerId] = weaponId;
+  /** @returns {boolean} */
+  setEquippedWeapon(characterId, weaponId) {
+    if (!WEAPONS[weaponId]) return false;
+    const s = this._ensure(characterId);
+    if (weaponId !== 'default' && this._tier(s, weaponId) < 0) return false;
+    s.weapon = weaponId;
+    this._save();
     return true;
   }
 
-  getUpgradeCount(playerId, upgradeId) {
-    return this._upgrades[playerId][upgradeId] ?? 0;
+  getShardCount(characterId, weaponId) {
+    if (weaponId === 'default') return 0;
+    const s = this._ensure(characterId);
+    const n = s.shards[weaponId];
+    return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
   }
 
-  buyUpgrade(playerId, upgradeId) {
-    const price = UPGRADE_PRICES[upgradeId];
-    if (!price) return false;
-    const count = this.getUpgradeCount(playerId, upgradeId);
-    if (count >= MAX_UPGRADES) return false;
-    if (this._coins[playerId] < price) return false;
-    this._coins[playerId] -= price;
-    this._upgrades[playerId][upgradeId] = count + 1;
+  getWeaponTier(characterId, weaponId) {
+    return this._tier(this._ensure(characterId), weaponId);
+  }
+
+  /** Buy one shard for a weapon (coins). */
+  buyWeaponShard(characterId, weaponId) {
+    if (weaponId === 'default' || !WEAPONS[weaponId]) return false;
+    const price = getShardCoinPrice(weaponId);
+    const s = this._ensure(characterId);
+    if (s.coins < price) return false;
+    s.coins -= price;
+    s.shards[weaponId] = (s.shards[weaponId] ?? 0) + 1;
+    this._save();
     return true;
   }
 
-  getUpgradesForPlayer(playerId) {
-    return { ...this._upgrades[playerId] };
+  /** Spend shards to unlock (tier -1→0) or upgrade (tier k→k+1). */
+  advanceWeaponWithShards(characterId, weaponId) {
+    if (weaponId === 'default' || !WEAPONS[weaponId]) return false;
+    const s = this._ensure(characterId);
+    const cur = this._tier(s, weaponId);
+    const need = shardsRequiredForNextAdvance(cur);
+    const have = this.getShardCount(characterId, weaponId);
+    if (have < need) return false;
+    s.shards[weaponId] = have - need;
+    this._setTier(s, weaponId, cur + 1);
+    this._save();
+    return true;
+  }
+
+  /** @returns {{ weaponId: string, shards: number } | null} */
+  buyMysteryBox(characterId) {
+    const s = this._ensure(characterId);
+    if (s.coins < MYSTERY_BOX_COIN_PRICE) return null;
+    s.coins -= MYSTERY_BOX_COIN_PRICE;
+    const roll = rollMysteryBoxWeapon();
+    s.shards[roll.weaponId] = (s.shards[roll.weaponId] ?? 0) + roll.shards;
+    this._save();
+    return roll;
+  }
+
+  shardsNeededForNext(characterId, weaponId) {
+    if (weaponId === 'default') return 0;
+    const cur = this.getWeaponTier(characterId, weaponId);
+    return shardsRequiredForNextAdvance(cur);
+  }
+
+  resetAllHeroes() {
+    this._byChar = {};
+    this._storage.clearHeroShop();
+  }
+
+  static load(storage = NOOP_STORAGE) {
+    return new ShopManager(storage);
   }
 }
 
-// CommonJS export for Jest
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { ShopManager };
-}
-
-// ES module export for browser — wrapped so Jest (CommonJS) doesn't choke on the syntax
-try {
-  // This block is intentionally unreachable in CommonJS environments.
-  // Bundlers/browsers that support static analysis will still pick up the export.
-  // eslint-disable-next-line no-undef
-  if (false) { exports.ShopManager = ShopManager; } // satisfy static checkers
-} catch (_) {}
+export { ShopManager };

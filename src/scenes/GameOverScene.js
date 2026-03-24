@@ -1,4 +1,5 @@
 import { FONT_FAMILY, addMenuBackdrop } from '../ui/theme.js';
+import { T } from '../i18n/hebrew.js';
 import { playUiConfirm, playUiBack } from '../audio/sfx.js';
 import { ensureBgm } from '../audio/music.js';
 import { createAudioControls } from '../ui/audioControls.js';
@@ -51,17 +52,17 @@ export default class GameOverScene extends Phaser.Scene {
       depth: 5,
     });
 
-    this.add.text(cx, cy - 100, 'GAME OVER', {
+    this.add.text(cx, cy - 100, T.gameOverTitle, {
       fontFamily: FONT_FAMILY,
       fontSize: '32px', color: '#ff3300',
       stroke: '#1a0000', strokeThickness: 6,
     }).setOrigin(0.5);
     const playerCount = this.registry.get('playerCount') ?? 1;
-    this.add.text(cx, cy, playerCount === 1 ? 'Your hero fell...' : 'Both heroes fell...', {
+    this.add.text(cx, cy, playerCount === 1 ? T.gameOverSolo : T.gameOverCoop, {
       fontFamily: FONT_FAMILY,
       fontSize: '14px', color: '#aaaaaa',
     }).setOrigin(0.5);
-    const retry = this.add.text(cx, cy + 110, '[ ENTER to Try Again ]', {
+    const retry = this.add.text(cx, cy + 110, T.tryAgain, {
       fontFamily: FONT_FAMILY,
       fontSize: '12px', color: '#ffffff',
     }).setOrigin(0.5);

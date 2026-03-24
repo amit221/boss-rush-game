@@ -1,4 +1,5 @@
 import { FONT_FAMILY, addMenuBackdrop } from '../ui/theme.js';
+import { T } from '../i18n/hebrew.js';
 import { playUiConfirm, playUiBack } from '../audio/sfx.js';
 import { ensureBgm } from '../audio/music.js';
 import { createAudioControls } from '../ui/audioControls.js';
@@ -51,20 +52,20 @@ export default class VictoryScene extends Phaser.Scene {
       depth: 5,
     });
 
-    this.add.text(cx, cy - 110, 'VICTORY!', {
+    this.add.text(cx, cy - 110, T.victoryTitle, {
       fontFamily: FONT_FAMILY,
       fontSize: '36px', color: '#ffdd00',
       stroke: '#ff8800', strokeThickness: 6,
     }).setOrigin(0.5);
-    this.add.text(cx, cy - 20, 'The Void God has been defeated!', {
+    this.add.text(cx, cy - 20, T.victoryLine1, {
       fontFamily: FONT_FAMILY,
       fontSize: '14px', color: '#ffffff',
     }).setOrigin(0.5);
-    this.add.text(cx, cy + 30, 'You saved the world... for now.', {
+    this.add.text(cx, cy + 30, T.victoryLine2, {
       fontFamily: FONT_FAMILY,
       fontSize: '11px', color: '#aaaaaa',
     }).setOrigin(0.5);
-    const again = this.add.text(cx, cy + 120, '[ ENTER to Play Again ]', {
+    const again = this.add.text(cx, cy + 120, T.playAgain, {
       fontFamily: FONT_FAMILY,
       fontSize: '12px', color: '#44ff44',
     }).setOrigin(0.5);

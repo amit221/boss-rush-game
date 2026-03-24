@@ -1,5 +1,6 @@
 import BaseBoss from './BaseBoss.js';
 import { WEAPONS } from '../../data/weapons.js';
+import { normalizeBossHp, isNegligibleBossHp } from './bossDefeatLogic.js';
 
 export default class ShadowMimic extends BaseBoss {
   constructor(scene, x, y) {
@@ -16,6 +17,11 @@ export default class ShadowMimic extends BaseBoss {
       this._isSplit = true;
       this._spawnClones();
     }
+  }
+
+  takeDamage(amount) {
+    if (this._isSplit) return;
+    super.takeDamage(amount);
   }
 
   _spawnClones() {
@@ -38,8 +44,10 @@ export default class ShadowMimic extends BaseBoss {
       clone.maxHp = cloneHp;
       clone.isClone = true;
       clone.takeDamage = (dmg) => {
-        clone.hp = Math.max(0, clone.hp - dmg);
-        if (clone.hp <= 0) {
+        const raw = Number(dmg);
+        const d = Number.isFinite(raw) && raw >= 0 ? raw : 0;
+        clone.hp = normalizeBossHp(Math.max(0, clone.hp - d), clone.maxHp);
+        if (isNegligibleBossHp(clone.hp, clone.maxHp)) {
           clone.destroy();
           this._clones = this._clones.filter(c => c !== clone);
           this._updateCloneHpBar();
@@ -62,7 +70,7 @@ export default class ShadowMimic extends BaseBoss {
     const totalHp = this._clones.reduce((sum, c) => sum + (c.hp ?? 0), 0);
     const totalMax = this._clones.length > 0 ? this.maxHp * 0.4 * 2 : 1;
     const ratio = Math.max(0, totalHp / totalMax);
-    if (this._hpBarFill) this._hpBarFill.scaleX = ratio;
+    this._applyHpBarScale(ratio);
   }
 
   updateBoss(time, delta, players) {

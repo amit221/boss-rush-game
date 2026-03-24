@@ -1,15 +1,7 @@
-import { shouldBossBeDefeated } from './bossDefeatLogic.js';
-
-const BOSS_AURA_COLORS = {
-  boss_kingslime:   0x44ff22,  // slime green
-  boss_pyroskull:   0xff6600,  // fire orange
-  boss_stormeagle:  0x6688ff,  // lightning blue
-  boss_irongolem:   0x888888,  // steel gray
-  boss_shadowmimic: 0x880033,  // shadow crimson
-  boss_kraken:      0x0088ff,  // ocean blue
-  boss_voidgod:     0xaa00ff,  // void purple
-};
-const DEFAULT_AURA_COLOR = 0xffaa44; // fallback
+import { shouldBossBeDefeated, normalizeBossHp } from './bossDefeatLogic.js';
+import { FONT_FAMILY } from '../../ui/theme.js';
+import { T } from '../../i18n/hebrew.js';
+import { BOSS_AURA_COLORS, DEFAULT_AURA_COLOR } from '../../data/bossAuraColors.js';
 
 export default class BaseBoss extends Phaser.Physics.Arcade.Sprite {
   constructor(scene, x, y, textureKey, config) {
@@ -43,37 +35,72 @@ export default class BaseBoss extends Phaser.Physics.Arcade.Sprite {
   }
 
   _createHpBar(scene) {
-    const barWidth = 600;
-    const barX = (1280 - barWidth) / 2;
-    const barY = 10;
+    const split = (scene.registry.get('playerCount') ?? 1) === 2;
+    const barH = 20;
+    const barY = 20;
 
-    this._hpBarBg = scene.add.rectangle(
-      barX + barWidth / 2, barY + 10, barWidth, 20, 0x333333
-    ).setScrollFactor(0).setDepth(100);
+    if (split) {
+      // One bar per split viewport (640px); full-width bar would straddle x=640 and look cut in half
+      const barWidth = 520;
+      const centersX = [320, 960];
+      this._splitHpBar = true;
+      this._hpBarBg = [];
+      this._hpBarFill = [];
+      centersX.forEach((cx) => {
+        const barX = cx - barWidth / 2;
+        this._hpBarBg.push(
+          scene.add.rectangle(cx, barY, barWidth, barH, 0x333333)
+            .setScrollFactor(0).setDepth(100)
+        );
+        const fill = scene.add.rectangle(barX, barY, barWidth, barH, 0xff4400)
+          .setScrollFactor(0).setDepth(101)
+          .setOrigin(0, 0.5);
+        this._hpBarFill.push(fill);
+      });
+      this._barWidth = barWidth;
+    } else {
+      this._splitHpBar = false;
+      const barWidth = 600;
+      const barX = (1280 - barWidth) / 2;
 
-    // Left-anchored fill bar — set x to left edge, origin to (0, 0.5)
-    this._hpBarFill = scene.add.rectangle(
-      barX, barY + 10, barWidth, 20, 0xff4400
-    ).setScrollFactor(0).setDepth(101);
-    this._hpBarFill.setOrigin(0, 0.5);
+      this._hpBarBg = scene.add.rectangle(
+        barX + barWidth / 2, barY, barWidth, barH, 0x333333
+      ).setScrollFactor(0).setDepth(100);
 
-    this._barWidth = barWidth;
+      this._hpBarFill = scene.add.rectangle(
+        barX, barY, barWidth, barH, 0xff4400
+      ).setScrollFactor(0).setDepth(101);
+      this._hpBarFill.setOrigin(0, 0.5);
+
+      this._barWidth = barWidth;
+    }
+  }
+
+  _applyHpBarScale(ratio) {
+    if (this._splitHpBar) {
+      this._hpBarFill.forEach((f) => { f.scaleX = ratio; });
+    } else if (this._hpBarFill) {
+      this._hpBarFill.scaleX = ratio;
+    }
   }
 
   _updateHpBar() {
     const ratio = Math.max(0, this.hp / this.maxHp);
-    this._hpBarFill.scaleX = ratio;
+    this._applyHpBarScale(ratio);
   }
 
   takeDamage(amount) {
-    this.hp = Math.max(0, this.hp - amount);
+    const raw = Number(amount);
+    const dmg = Number.isFinite(raw) && raw >= 0 ? raw : 0;
+    this.hp = Math.max(0, this.hp - dmg);
+    this.hp = normalizeBossHp(this.hp, this.maxHp);
     this._updateHpBar();
     this._checkPhase();
     this._checkDefeated();
   }
 
   _checkDefeated() {
-    if (shouldBossBeDefeated(this.hp, this._defeatedEmitted)) {
+    if (shouldBossBeDefeated(this.hp, this._defeatedEmitted, this.maxHp)) {
       this._defeatedEmitted = true;
       this.emit('defeated');
     }
@@ -90,7 +117,8 @@ export default class BaseBoss extends Phaser.Physics.Arcade.Sprite {
 
   _doPhaseTransition() {
     this.scene.cameras.main.flash(300, 255, 255, 255);
-    const label = this.scene.add.text(640, 360, `PHASE ${this.phase}!`, {
+    const label = this.scene.add.text(640, 360, T.phaseLabel(this.phase), {
+      fontFamily: FONT_FAMILY,
       fontSize: '64px', color: '#ff4444', fontStyle: 'bold',
       stroke: '#000000', strokeThickness: 8
     }).setOrigin(0.5).setScrollFactor(0).setDepth(300);
@@ -118,8 +146,13 @@ export default class BaseBoss extends Phaser.Physics.Arcade.Sprite {
   }
 
   destroy() {
-    this._hpBarBg?.destroy();
-    this._hpBarFill?.destroy();
+    if (this._splitHpBar) {
+      this._hpBarBg.forEach((g) => g.destroy());
+      this._hpBarFill.forEach((f) => f.destroy());
+    } else {
+      this._hpBarBg?.destroy();
+      this._hpBarFill?.destroy();
+    }
     this._auraGfx?.destroy();
     super.destroy();
   }
