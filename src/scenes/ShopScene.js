@@ -3,7 +3,7 @@ import { CHARACTERS } from '../data/characters.js';
 import { FONT_FAMILY, addMenuBackdrop, COLORS } from '../ui/theme.js';
 import { T } from '../i18n/hebrew.js';
 import { abandonRunToMenu } from '../navigation.js';
-import { playUiBuy, playUiConfirm, playUiBack } from '../audio/sfx.js';
+import { playUiBuy, playUiConfirm, playUiBack, playUiNav } from '../audio/sfx.js';
 import { ensureBgm } from '../audio/music.js';
 import { createAudioControls } from '../ui/audioControls.js';
 import { getShardCoinPrice, MYSTERY_BOX_COIN_PRICE } from '../data/weaponEconomy.js';
@@ -39,12 +39,31 @@ export default class ShopScene extends Phaser.Scene {
     this._sm = this.registry.get('shopManager');
     this._playerCount = this.registry.get('playerCount') ?? 1;
     this._confirmed = { 1: false, 2: this._playerCount === 1 };
-    this._weaponPage = { 1: 0, 2: 0 };
+    const saved = this.registry.get('shopWeaponPages');
+    this._weaponPage = {
+      1: Number.isFinite(saved?.[1]) ? saved[1] : 0,
+      2: Number.isFinite(saved?.[2]) ? saved[2] : 0,
+    };
     this._listObjects = { 1: [], 2: [] };
+    this._shopPanel = {};
+    this._focus = { 1: { row: 0, col: 0 }, 2: { row: 0, col: 0 } };
+    this._focusGfx = { 1: null, 2: null };
     this._buildUI();
+    this._pids().forEach((pid) => {
+      this._ensureFocusGfx(pid);
+      this._clampFocus(pid);
+      this._updateFocusVisual(pid);
+    });
     this._setupInput();
     ensureBgm(this, 'music_menu');
     createAudioControls(this);
+  }
+
+  _persistWeaponPagesForRestart() {
+    this.registry.set('shopWeaponPages', {
+      1: this._weaponPage[1] ?? 0,
+      2: this._weaponPage[2] ?? 0,
+    });
   }
 
   _track(pid, ...objs) {
@@ -127,10 +146,17 @@ export default class ShopScene extends Phaser.Scene {
         color: curId === 'default' ? '#c8b898' : '#88ffaa',
       }).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH_UI);
 
-      this.add.text(ox, 138, T.shopHintActions, {
+      this.add.text(ox, 122, T.shopHintActions, {
         fontFamily: FONT_FAMILY,
         fontSize: '7px',
         color: '#666666',
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH_UI);
+
+      const navHint = this._playerCount === 2 ? T.shopHintNavCoop : T.shopHintNavSolo;
+      this.add.text(ox, 134, navHint, {
+        fontFamily: FONT_FAMILY,
+        fontSize: '7px',
+        color: '#888888',
       }).setOrigin(0.5).setScrollFactor(0).setDepth(DEPTH_UI);
 
       this._addDefaultRow(pid, charId, ox, left, right);
@@ -192,6 +218,7 @@ export default class ShopScene extends Phaser.Scene {
       () => {
         if (sm.setEquippedWeapon(charId, 'default')) {
           playUiConfirm(this);
+          this._persistWeaponPagesForRestart();
           this.scene.restart();
         }
       },
@@ -224,6 +251,7 @@ export default class ShopScene extends Phaser.Scene {
       r.on('pointerdown', () => {
         if (sm.buyMysteryBox(charId)) {
           playUiBuy(this);
+          this._persistWeaponPagesForRestart();
           this.scene.restart();
         }
       });
@@ -261,6 +289,206 @@ export default class ShopScene extends Phaser.Scene {
         this._weaponPage[pid] = page + 1;
         this._refreshList(pid, charId, ox, left);
       });
+    }
+
+    this._shopPanel[pid] = {
+      charId,
+      ox,
+      left,
+      slice: slice.slice(),
+      nPages,
+      page,
+    };
+    this._clampFocus(pid);
+    this._updateFocusVisual(pid);
+  }
+
+  _pids() {
+    return this._playerCount === 1 ? [1] : [1, 2];
+  }
+
+  _ensureFocusGfx(pid) {
+    if (this._focusGfx[pid]) return;
+    const color = pid === 1 ? 0x6699ff : 0xff9966;
+    this._focusGfx[pid] = this.add.rectangle(0, 0, 8, 8, 0, 0)
+      .setStrokeStyle(3, color)
+      .setScrollFactor(0)
+      .setDepth(DEPTH_UI + 4);
+  }
+
+  _maxWeaponRowIndex(pid) {
+    const p = this._shopPanel[pid];
+    if (!p?.slice) return 1;
+    const n = p.slice.length;
+    return n === 0 ? 1 : 2 + n - 1;
+  }
+
+  _pageRowIndex(pid) {
+    const p = this._shopPanel[pid];
+    if (!p || p.nPages <= 1) return -1;
+    return 2 + p.slice.length;
+  }
+
+  _maxRow(pid) {
+    const pr = this._pageRowIndex(pid);
+    return pr >= 0 ? pr : this._maxWeaponRowIndex(pid);
+  }
+
+  _maxCol(pid, row) {
+    const p = this._shopPanel[pid];
+    if (!p) return 0;
+    if (row === 0 || row === 1) return 0;
+    const pr = this._pageRowIndex(pid);
+    if (pr >= 0 && row === pr) return 1;
+    if (row >= 2 && row < 2 + p.slice.length) {
+      const wid = p.slice[row - 2];
+      const tier = this._sm.getWeaponTier(p.charId, wid);
+      return tier >= 0 ? 2 : 1;
+    }
+    return 0;
+  }
+
+  _clampFocus(pid) {
+    const f = this._focus[pid];
+    const maxR = this._maxRow(pid);
+    f.row = Phaser.Math.Clamp(f.row, 0, maxR);
+    f.col = Phaser.Math.Clamp(f.col, 0, this._maxCol(pid, f.row));
+  }
+
+  _weaponColGeom(charId, weaponId, right, rowTop, col) {
+    const tier = this._sm.getWeaponTier(charId, weaponId);
+    const btnY = rowTop + ROW_H - 18;
+    let xBtn = right - 12 - BTN_W / 2;
+    const slots = [];
+    if (tier >= 0) {
+      slots[2] = { x: xBtn, y: btnY, w: BTN_W, h: BTN_H };
+      xBtn -= BTN_W + BTN_GAP;
+    }
+    slots[1] = { x: xBtn, y: btnY, w: BTN_W + 10, h: BTN_H };
+    xBtn -= BTN_W + 10 + BTN_GAP;
+    slots[0] = { x: xBtn, y: btnY, w: BTN_W + 6, h: BTN_H };
+    return slots[col];
+  }
+
+  _updateFocusVisual(pid) {
+    const gfx = this._focusGfx[pid];
+    const p = this._shopPanel[pid];
+    if (!gfx || !p) return;
+
+    const { row, col } = this._focus[pid];
+    const { charId, ox, left } = p;
+    const right = ox + COL_W / 2;
+    let g;
+
+    if (row === 0) {
+      const btnRight = right - 12 - BTN_W / 2;
+      const y = 146 + 22;
+      g = { x: btnRight, y, w: BTN_W + 8, h: BTN_H + 10 };
+    } else if (row === 1) {
+      g = { x: ox, y: 198 + 14, w: COL_W - 20, h: 30 };
+    } else {
+      const pr = this._pageRowIndex(pid);
+      if (pr >= 0 && row === pr) {
+        const navY = LIST_TOP + PAGE_SIZE * ROW_H + 12;
+        const cx = col === 0 ? ox - 72 : ox + 72;
+        g = { x: cx, y: navY, w: 68, h: 26 };
+      } else if (row >= 2 && row < 2 + p.slice.length) {
+        const i = row - 2;
+        const rowTop = LIST_TOP + i * ROW_H;
+        const wid = p.slice[i];
+        g = this._weaponColGeom(charId, wid, right, rowTop, col);
+      }
+    }
+
+    if (!g) return;
+    gfx.setPosition(g.x, g.y);
+    gfx.setSize(g.w, g.h);
+    gfx.setVisible(true);
+  }
+
+  _navVertical(pid, delta) {
+    if (delta === 0) return;
+    const f = this._focus[pid];
+    const next = Phaser.Math.Clamp(f.row + delta, 0, this._maxRow(pid));
+    if (next !== f.row) {
+      playUiNav(this);
+      f.row = next;
+      f.col = Phaser.Math.Clamp(f.col, 0, this._maxCol(pid, f.row));
+      this._updateFocusVisual(pid);
+    }
+  }
+
+  _navHorizontal(pid, delta) {
+    if (delta === 0) return;
+    const f = this._focus[pid];
+    const maxC = this._maxCol(pid, f.row);
+    const next = Phaser.Math.Clamp(f.col + delta, 0, maxC);
+    if (next !== f.col) {
+      playUiNav(this);
+      f.col = next;
+      this._updateFocusVisual(pid);
+    }
+  }
+
+  _activateFocus(pid) {
+    const p = this._shopPanel[pid];
+    if (!p) return;
+    const sm = this._sm;
+    const { row, col } = this._focus[pid];
+    const { charId, ox, left, slice, nPages, page } = p;
+    const right = ox + COL_W / 2;
+
+    if (row === 0) {
+      if (sm.setEquippedWeapon(charId, 'default')) {
+        playUiConfirm(this);
+        this._persistWeaponPagesForRestart();
+        this.scene.restart();
+      }
+      return;
+    }
+    if (row === 1) {
+      if (sm.buyMysteryBox(charId)) {
+        playUiBuy(this);
+        this._persistWeaponPagesForRestart();
+        this.scene.restart();
+      }
+      return;
+    }
+
+    const pr = nPages > 1 ? 2 + slice.length : -1;
+    if (pr >= 0 && row === pr) {
+      if (col === 0 && page > 0) {
+        this._weaponPage[pid] = page - 1;
+        this._refreshList(pid, charId, ox, left);
+      } else if (col === 1 && page < nPages - 1) {
+        this._weaponPage[pid] = page + 1;
+        this._refreshList(pid, charId, ox, left);
+      }
+      return;
+    }
+
+    if (row >= 2 && row < 2 + slice.length) {
+      const weaponId = slice[row - 2];
+      const tier = sm.getWeaponTier(charId, weaponId);
+      if (col === 0) {
+        if (sm.buyWeaponShard(charId, weaponId)) {
+          playUiBuy(this);
+          this._persistWeaponPagesForRestart();
+          this.scene.restart();
+        }
+      } else if (col === 1) {
+        if (sm.advanceWeaponWithShards(charId, weaponId)) {
+          playUiBuy(this);
+          this._persistWeaponPagesForRestart();
+          this.scene.restart();
+        }
+      } else if (col === 2 && tier >= 0) {
+        if (sm.setEquippedWeapon(charId, weaponId)) {
+          playUiConfirm(this);
+          this._persistWeaponPagesForRestart();
+          this.scene.restart();
+        }
+      }
     }
   }
 
@@ -319,6 +547,7 @@ export default class ShopScene extends Phaser.Scene {
         () => {
           if (sm.setEquippedWeapon(charId, weaponId)) {
             playUiConfirm(this);
+            this._persistWeaponPagesForRestart();
             this.scene.restart();
           }
         },
@@ -338,6 +567,7 @@ export default class ShopScene extends Phaser.Scene {
       () => {
         if (sm.advanceWeaponWithShards(charId, weaponId)) {
           playUiBuy(this);
+          this._persistWeaponPagesForRestart();
           this.scene.restart();
         }
       },
@@ -355,6 +585,7 @@ export default class ShopScene extends Phaser.Scene {
       () => {
         if (sm.buyWeaponShard(charId, weaponId)) {
           playUiBuy(this);
+          this._persistWeaponPagesForRestart();
           this.scene.restart();
         }
       },
@@ -362,11 +593,54 @@ export default class ShopScene extends Phaser.Scene {
   }
 
   _setupInput() {
-    this.input.keyboard.on('keydown-ENTER', () => this._confirm(1));
-    this.input.keyboard.on('keydown-SHIFT', () => this._confirm(2));
-    this.input.keyboard.on('keydown-ESC', () => {
+    this._onKbdEnter = () => this._confirm(1);
+    this._onKbdShift = () => this._confirm(2);
+    this._onKbdEsc = () => {
       playUiBack(this);
       abandonRunToMenu(this);
+    };
+    this._onKbdNav = (e) => {
+      if (e.repeat) return;
+      const solo = this._playerCount === 1;
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        this._activateFocus(1);
+        return;
+      }
+      if (!solo && e.code === 'KeyR' && !e.ctrlKey && !e.metaKey) {
+        this._activateFocus(2);
+        return;
+      }
+
+      if (solo) {
+        if (e.code === 'KeyW' || e.code === 'ArrowUp') this._navVertical(1, -1);
+        else if (e.code === 'KeyS' || e.code === 'ArrowDown') this._navVertical(1, 1);
+        else if (e.code === 'KeyA' || e.code === 'ArrowLeft') this._navHorizontal(1, -1);
+        else if (e.code === 'KeyD' || e.code === 'ArrowRight') this._navHorizontal(1, 1);
+        return;
+      }
+
+      if (e.code === 'KeyW') this._navVertical(1, -1);
+      else if (e.code === 'KeyS') this._navVertical(1, 1);
+      else if (e.code === 'KeyA') this._navHorizontal(1, -1);
+      else if (e.code === 'KeyD') this._navHorizontal(1, 1);
+      else if (e.code === 'ArrowUp') this._navVertical(2, -1);
+      else if (e.code === 'ArrowDown') this._navVertical(2, 1);
+      else if (e.code === 'ArrowLeft') this._navHorizontal(2, -1);
+      else if (e.code === 'ArrowRight') this._navHorizontal(2, 1);
+    };
+
+    this.input.keyboard.on('keydown-ENTER', this._onKbdEnter);
+    this.input.keyboard.on('keydown-SHIFT', this._onKbdShift);
+    this.input.keyboard.on('keydown-ESC', this._onKbdEsc);
+    this.input.keyboard.on('keydown', this._onKbdNav);
+    this.events.once('shutdown', () => {
+      if (!this.input?.keyboard) return;
+      this.input.keyboard.off('keydown-ENTER', this._onKbdEnter);
+      this.input.keyboard.off('keydown-SHIFT', this._onKbdShift);
+      this.input.keyboard.off('keydown-ESC', this._onKbdEsc);
+      this.input.keyboard.off('keydown', this._onKbdNav);
     });
   }
 

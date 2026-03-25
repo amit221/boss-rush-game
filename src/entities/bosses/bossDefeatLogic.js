@@ -26,3 +26,51 @@ export function normalizeBossHp(hp, maxHp) {
   if (isNegligibleBossHp(hp, maxHp)) return 0;
   return hp;
 }
+
+function bossMaxHp(boss) {
+  const m = boss?.maxHp;
+  return Number.isFinite(m) && m > 0 ? m : Infinity;
+}
+
+/**
+ * Subtract damage and normalize HP — single pipeline for every boss-like entity.
+ * Does not run phase UI or emit defeat; call finalizeBossDefeatIfDead after bar/phase hooks if needed.
+ */
+export function applyBossDamage(boss, amount) {
+  if (!boss) return;
+  const raw = Number(amount);
+  const dmg = Number.isFinite(raw) && raw >= 0 ? raw : 0;
+  const hp0 = Number.isFinite(boss.hp) ? boss.hp : 0;
+  boss.hp = normalizeBossHp(Math.max(0, hp0 - dmg), bossMaxHp(boss));
+}
+
+/**
+ * One defeat gate for all bosses: normalize HP, then emit "defeated" at most once.
+ * Phaser boss sprites already implement emit/on; use attachBossDefeatEmitter for plain objects.
+ */
+export function finalizeBossDefeatIfDead(boss) {
+  if (!boss) return;
+  const maxHp = bossMaxHp(boss);
+  boss.hp = normalizeBossHp(Number.isFinite(boss.hp) ? boss.hp : 0, maxHp);
+  if (boss._defeatedEmitted) return;
+  if (!shouldBossBeDefeated(boss.hp, false, maxHp)) return;
+  boss._defeatedEmitted = true;
+  if (typeof boss.emit === 'function') {
+    boss.emit('defeated');
+  }
+}
+
+/** Minimal event surface so placeholder bosses can share finalizeBossDefeatIfDead with BaseBoss */
+export function attachBossDefeatEmitter(target) {
+  const listeners = [];
+  target.on = (event, fn, context) => {
+    if (event !== 'defeated' || typeof fn !== 'function') return;
+    listeners.push({ fn, context });
+  };
+  target.emit = (event, ...args) => {
+    if (event !== 'defeated') return;
+    listeners.slice().forEach(({ fn, context }) => {
+      fn.apply(context, args);
+    });
+  };
+}

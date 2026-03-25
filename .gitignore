@@ -1,3 +1,5 @@
+.kenney-tmp/
+
 .worktrees/
 dist/
 node_modules/

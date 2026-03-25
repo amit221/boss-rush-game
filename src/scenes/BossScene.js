@@ -4,7 +4,11 @@ import { getArenaFloorStyle, drawArenaFloorPattern } from '../data/arenaFloorSty
 import { WEAPONS } from '../data/weapons.js';
 import { MINION_COIN_VALUE, MINION_COIN_DESPAWN_MS, minionShouldDropCoins } from '../data/minionLoot.js';
 import { recordBossDefeated } from '../persistence/bossUnlocks.js';
-import { shouldBossBeDefeated, normalizeBossHp } from '../entities/bosses/bossDefeatLogic.js';
+import {
+  applyBossDamage,
+  attachBossDefeatEmitter,
+  finalizeBossDefeatIfDead,
+} from '../entities/bosses/bossDefeatLogic.js';
 import { FONT_FAMILY, COLORS } from '../ui/theme.js';
 import { T } from '../i18n/hebrew.js';
 import { ensureBgm } from '../audio/music.js';
@@ -67,12 +71,19 @@ function schedulePoisonDamage(scene, target, hitDamage, poison) {
       if (typeof target.takeDamage === 'function') {
         target.takeDamage(tickDmg);
       } else if (target.hp !== undefined) {
-        target.hp -= tickDmg;
-        if (target.hp <= 0) {
-          if (scene.minions && scene.minions.contains(target)) {
-            scene._finishMinionCombatDeath(target);
-          } else {
-            target.destroy();
+        if (target === scene.boss) {
+          applyBossDamage(target, tickDmg);
+          if (typeof target._updateHpBar === 'function') target._updateHpBar();
+          if (typeof target._checkPhase === 'function') target._checkPhase();
+          finalizeBossDefeatIfDead(target);
+        } else {
+          target.hp -= tickDmg;
+          if (target.hp <= 0) {
+            if (scene.minions && scene.minions.contains(target)) {
+              scene._finishMinionCombatDeath(target);
+            } else {
+              target.destroy();
+            }
           }
         }
       }
@@ -320,16 +331,15 @@ export default class BossScene extends Phaser.Scene {
     rect.hp = 300;
     rect.maxHp = 300;
     rect.phase = 1;
+    rect._defeatedEmitted = false;
+    attachBossDefeatEmitter(rect);
     rect.takeDamage = (dmg) => {
       if (this._bossDefeated) return;
-      const raw = Number(dmg);
-      const d = Number.isFinite(raw) && raw >= 0 ? raw : 0;
-      rect.hp = normalizeBossHp(Math.max(0, rect.hp - d), rect.maxHp);
-      if (shouldBossBeDefeated(rect.hp, !!this._bossDefeated, rect.maxHp)) {
-        this._onBossDefeated();
-      }
+      applyBossDamage(rect, dmg);
+      finalizeBossDefeatIfDead(rect);
     };
     this.boss = rect;
+    this.boss.on('defeated', this._onBossDefeated, this);
 
     // Simple chase behavior
     this._placeholderTimer = this.time.addEvent({
@@ -394,38 +404,52 @@ export default class BossScene extends Phaser.Scene {
     this._p2HpBar = addRow(960, 2, this._p2HudObjs);
   }
 
-  /** Each split viewport only draws that player’s HUD + ESC hint on their side. */
+  /** Split viewports: each side only shows that player’s ESC hint (HP/boss bar use the fullscreen UI camera). */
   _bindSplitScreenUiToCameras() {
     if (this._playerCount !== 2 || !this.cam2) return;
-    this._p1HudObjs.forEach((o) => this.cam2.ignore(o));
-    this._p2HudObjs.forEach((o) => this.cameras.main.ignore(o));
     if (this._escHintP1) this.cam2.ignore(this._escHintP1);
     if (this._escHintP2) this.cameras.main.ignore(this._escHintP2);
   }
 
   /**
-   * Single boss HP bar centered on the full 1280× canvas; split cameras clip it in half.
-   * A transparent full-frame camera redraws only the boss bar on top so both players see the full bar.
+   * Full 1280× HUD layer for 2P: split cameras clip fixed UI, so boss HP + both player HP bars are drawn
+   * on a transparent overlay camera (same idea as boss bar only, extended to player HUD).
    */
   _setupBossHpOverlayCamera() {
     if (this._playerCount !== 2 || !this.cam2) return;
     const boss = this.boss;
-    if (!boss || !boss._hpBarBg || !boss._hpBarFill) return;
-    const layers = [boss._hpBarBg, boss._hpBarFill];
-    this.cameras.main.ignore(layers);
-    this.cam2.ignore(layers);
+    const bossLayers =
+      boss && boss._hpBarBg && boss._hpBarFill ? [boss._hpBarBg, boss._hpBarFill] : [];
+    const p1 = this._p1HudObjs ?? [];
+    const p2 = this._p2HudObjs ?? [];
+    const layers = [...bossLayers, ...p1, ...p2];
+    if (layers.length === 0) return;
+
+    layers.forEach((obj) => {
+      this.cameras.main.ignore(obj);
+      this.cam2.ignore(obj);
+    });
+
     const uiCam = this.cameras.add(0, 0, 1280, 720);
     uiCam.transparent = true;
     uiCam.setScroll(0, 0);
     this._bossUiCam = uiCam;
-    const ignoreUnlessBoss = (child) => {
-      if (!child || layers.includes(child)) return;
+
+    const allow = new Set(layers);
+    this._splitUiIgnoreOnAdd = (child) => {
+      if (!child || allow.has(child)) return;
       uiCam.ignore(child);
     };
-    this.children.each(ignoreUnlessBoss);
+    this.children.each(this._splitUiIgnoreOnAdd);
     if (this.children.events) {
-      this.children.events.on('add', ignoreUnlessBoss);
+      this.children.events.on('add', this._splitUiIgnoreOnAdd);
     }
+    this.events.once('shutdown', () => {
+      if (this._splitUiIgnoreOnAdd && this.children?.events) {
+        this.children.events.off('add', this._splitUiIgnoreOnAdd);
+      }
+      this._splitUiIgnoreOnAdd = null;
+    });
   }
 
   _hpBarColor(ratio) {
@@ -519,12 +543,19 @@ export default class BossScene extends Phaser.Scene {
     if (typeof target.takeDamage === 'function') {
       target.takeDamage(dmg);
     } else if (target.hp !== undefined) {
-      target.hp -= dmg;
-      if (target.hp <= 0) {
-        if (this.minions.contains(target)) {
-          this._finishMinionCombatDeath(target);
-        } else {
-          target.destroy();
+      if (target === this.boss) {
+        applyBossDamage(target, dmg);
+        if (typeof target._updateHpBar === 'function') target._updateHpBar();
+        if (typeof target._checkPhase === 'function') target._checkPhase();
+        finalizeBossDefeatIfDead(target);
+      } else {
+        target.hp -= dmg;
+        if (target.hp <= 0) {
+          if (this.minions.contains(target)) {
+            this._finishMinionCombatDeath(target);
+          } else {
+            target.destroy();
+          }
         }
       }
     }
@@ -738,13 +769,10 @@ export default class BossScene extends Phaser.Scene {
     this._updateHUD();
     if (!this.boss) return;
 
-    // Safety net: boss at 0 / negligible HP must trigger defeat (handles event/listener failures)
-    if (
-      this.boss.hp !== undefined &&
-      shouldBossBeDefeated(this.boss.hp, !!this._bossDefeated, this.boss.maxHp)
-    ) {
-      this._onBossDefeated();
-      return;
+    // Safety net: negligible HP must trigger defeat (same path as takeDamage)
+    if (this.boss.hp !== undefined) {
+      finalizeBossDefeatIfDead(this.boss);
+      if (this._bossDefeated) return;
     }
 
     const allMinions = [

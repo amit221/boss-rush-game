@@ -1,2 +1,18 @@
 Arena floor (floor.png): Kenney "Tiny Dungeon" — tile_0048.png (same as sample map floor cells).
+Boss sprites (boss_*.png): Kenney "Tiny Dungeon" (CC0), scaled in BootScene with nearest-neighbor.
+Early bosses are edited composites; late bosses use distinct creature tiles that do not reuse the same PNG as
+KingSlime / PyroSkull / StormEagle / IronGolem / ShadowMimic / Kraken / VoidGod, knight.png, or rogue.png.
+
+Post–VoidGod sources:
+  AshWraith — tile_0130 (larva / withered)
+  CrystalMatriarch — tile_0124 (blue armored sprite)
+  ClockworkJudge — tile_0054 (robot)
+  TwinBinder — two× tile_0066 side by side (see scripts/compose_twinbinder_sprite.py; requires Pillow + .kenney-tmp pack)
+  SporeSovereign — tile_0066 (slime; single tile, not the paired twin asset)
+  RunicColossus — tile_0087 (yeti / big brute)
+  HiveCrown — tile_0122 (beetle)
+  PrismPhantom — tile_0084 (wizard)
+  Tidebreaker — tile_0107 (bronze pod creature)
+  SolarWarden — tile_0131 (torch — reads as solar / fire)
+
 License: CC0 — https://kenney.nl/assets/tiny-dungeon

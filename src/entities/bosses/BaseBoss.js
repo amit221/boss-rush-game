@@ -1,4 +1,4 @@
-import { shouldBossBeDefeated, normalizeBossHp } from './bossDefeatLogic.js';
+import { applyBossDamage, finalizeBossDefeatIfDead } from './bossDefeatLogic.js';
 import { FONT_FAMILY } from '../../ui/theme.js';
 import { T } from '../../i18n/hebrew.js';
 import { BOSS_AURA_COLORS, DEFAULT_AURA_COLOR } from '../../data/bossAuraColors.js';
@@ -13,6 +13,7 @@ export default class BaseBoss extends Phaser.Physics.Arcade.Sprite {
     this.maxHp = config.hp;
     this.hp = config.hp;
     this.phase = 1;
+    this._defeatedEmitted = false;
 
     this._createHpBar(scene);
 
@@ -62,20 +63,10 @@ export default class BaseBoss extends Phaser.Physics.Arcade.Sprite {
   }
 
   takeDamage(amount) {
-    const raw = Number(amount);
-    const dmg = Number.isFinite(raw) && raw >= 0 ? raw : 0;
-    this.hp = Math.max(0, this.hp - dmg);
-    this.hp = normalizeBossHp(this.hp, this.maxHp);
+    applyBossDamage(this, amount);
     this._updateHpBar();
     this._checkPhase();
-    this._checkDefeated();
-  }
-
-  _checkDefeated() {
-    if (shouldBossBeDefeated(this.hp, this._defeatedEmitted, this.maxHp)) {
-      this._defeatedEmitted = true;
-      this.emit('defeated');
-    }
+    finalizeBossDefeatIfDead(this);
   }
 
   _checkPhase() {
@@ -112,7 +103,7 @@ export default class BaseBoss extends Phaser.Physics.Arcade.Sprite {
       this._auraGfx.strokeCircle(this.x, this.y, this.displayWidth * 0.55);
     }
 
-    this._checkDefeated(); // Safety net: catch 0 HP even if takeDamage missed it
+    finalizeBossDefeatIfDead(this); // Safety net: catch negligible HP even if takeDamage was bypassed
     this.updateBoss(time, delta, players);
     // _updateHpBar is called inside takeDamage — no need here
   }

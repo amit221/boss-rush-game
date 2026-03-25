@@ -35,6 +35,8 @@ export const T = {
   coins: (n) => `מטבעות: ${n}`,
   shopActiveWeapon: (name) => `נשק פעיל: ${name}`,
   shopHintActions: 'שברים (מטבעות) · פתיחה/שדרוג (שברים) · ציוד לפני הקרב',
+  shopHintNavSolo: 'ניווט: חצים או WASD · רווח לבחירה',
+  shopHintNavCoop: 'ניווט: ש1 WASD + רווח · ש2 חצים + R',
   shopPage: (n, total) => `עמוד ${n} / ${total}`,
   shopPrev: '‹ קודם',
   shopNext: 'הבא ›',

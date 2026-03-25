@@ -12,6 +12,8 @@ export default class MenuScene extends Phaser.Scene {
   create() {
     const cx = 640, cy = 360;
 
+    this.registry.set('shopWeaponPages', null);
+
     addMenuBackdrop(this);
     this.add.rectangle(cx, cy, 1240, 680, 0x000000, 0.25).setDepth(-9);
 
